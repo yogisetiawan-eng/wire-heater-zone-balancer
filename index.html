@@ -84,6 +84,14 @@ button.x{padding:4px 8px;font-family:var(--f-mono);color:var(--muted)}
 .pill{display:inline-block;font-family:var(--f-body);font-weight:700;font-size:.7rem;letter-spacing:.04em;padding:1px 7px;border-radius:999px;border:1px solid currentColor;margin-left:6px;vertical-align:1px}
 .c-cold{color:var(--cold)} .c-ok{color:var(--ok)} .c-hot{color:var(--hot)} .c-warn{color:var(--warn)}
 .pos{color:var(--hot)} .neg{color:var(--cold)}
+.ws-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.wsf{display:grid;gap:4px;font-size:.8rem;color:var(--muted);flex:1 1 200px;min-width:0}
+.wsf input{font-family:var(--f-body);font-size:.92rem}
+.ws-sep{flex:0 0 1px;align-self:stretch;background:var(--line);margin:0 4px}
+@media (max-width:640px){.ws-sep{display:none}}
+button[disabled]{opacity:.5;cursor:not-allowed}
+#wsMsg{margin-top:10px}
+#wsMsg.ok{color:var(--ok)} #wsMsg.bad{color:var(--hot)}
 .errors{color:var(--hot);font-weight:600;margin:0}
 .errors:empty{display:none}
 
@@ -110,6 +118,22 @@ svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none}
     </div>
     <button id="copy" type="button">Copy results for Sheets</button>
   </header>
+
+  <section class="panel" aria-label="Workspace">
+    <h2>Workspace</h2>
+    <div class="ws-row">
+      <label class="wsf" for="wsName"><span>Name</span><input id="wsName" type="text" maxlength="80" placeholder="e.g. Front flange, test 1"></label>
+      <button id="wsSave" class="primary" type="button">Save</button>
+      <label class="wsf" for="wsList"><span>Saved in this browser</span><select id="wsList"></select></label>
+      <button id="wsLoad" type="button">Load</button>
+      <button id="wsDel" type="button">Delete</button>
+      <span class="ws-sep" aria-hidden="true"></span>
+      <button id="wsExport" type="button">Export file</button>
+      <button id="wsImportBtn" type="button">Import file</button>
+      <input id="wsImport" type="file" accept=".json,application/json" hidden>
+    </div>
+    <p class="note" id="wsMsg" role="status">Saved workspaces stay in this browser. Export a file to keep a backup or send it to a colleague.</p>
+  </section>
 
   <div class="grid">
     <aside class="panel">
@@ -226,7 +250,7 @@ const EXAMPLE={
 };
 const clone=o=>JSON.parse(JSON.stringify(o));
 let S=clone(EXAMPLE), isExample=true;
-try{const raw=localStorage.getItem(KEY); if(raw){const p=JSON.parse(raw); if(p&&p.sides){S=Object.assign(clone(EXAMPLE),p.state||p); isExample=!!p.isExample;}}}catch(e){}
+try{const raw=localStorage.getItem(KEY); if(raw){const p=JSON.parse(raw); const st=p&&(p.state||p); if(st&&Array.isArray(st.sides)&&st.sides.length){S=Object.assign(clone(EXAMPLE),st); isExample=!!p.isExample;}}}catch(e){}
 function save(){try{localStorage.setItem(KEY,JSON.stringify({state:S,isExample}))}catch(e){}}
 
 const $=id=>document.getElementById(id);
@@ -421,7 +445,71 @@ $('copy').addEventListener('click',()=>{
   try{navigator.clipboard.writeText(txt).then(done,fallback);}catch(e){fallback();}
 });
 
-renderSetup(); renderZones(); update();
+// ---- workspaces ----
+const WSKEY='wire-heater-balancer-workspaces-v1';
+const wsList=$('wsList'), wsName=$('wsName'), wsMsg=$('wsMsg');
+function wsAll(){try{const o=JSON.parse(localStorage.getItem(WSKEY)||'{}'); return (o&&typeof o==='object')?o:{};}catch(e){return {};}}
+function wsPut(o){try{localStorage.setItem(WSKEY,JSON.stringify(o)); return true;}catch(e){return false;}}
+function msg(t,cls){wsMsg.textContent=t; wsMsg.className='note'+(cls?' '+cls:'');}
+function when(iso){const d=new Date(iso); return isNaN(d)?'':d.toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});}
+function wsRender(select){
+  const all=wsAll(); const names=Object.keys(all).sort((a,b)=>String(all[b].savedAt||'').localeCompare(String(all[a].savedAt||'')));
+  wsList.innerHTML=names.length?names.map(n=>`<option value="${esc(n)}">${esc(n)}${all[n].savedAt?' · '+esc(when(all[n].savedAt)):''}</option>`).join(''):'<option value="">No saved workspaces yet</option>';
+  if(select&&all[select]) wsList.value=select;
+  $('wsLoad').disabled=$('wsDel').disabled=!names.length; resetDel();
+}
+function packWorkspace(name){return {app:'wire-heater-zone-balancer',version:1,name:name||'',savedAt:new Date().toISOString(),state:clone(S)};}
+function applyWorkspace(obj){
+  const st=obj&&obj.state?obj.state:obj;
+  if(!st||!Array.isArray(st.sides)||!st.sides.length) throw new Error('This file has no zone data.');
+  const merged=Object.assign(clone(EXAMPLE),clone(st));
+  NUM.forEach(id=>{merged[id]=parseFloat(merged[id]);});
+  merged.sides=st.sides.map((x,i)=>({name:String(x&&x.name!=null?x.name:'Side '+(i+1)),color:(x&&/^#[0-9a-f]{6}$/i.test(x.color))?x.color:'#7a8699',area:parseFloat(x&&x.area),rp:parseFloat(x&&x.rp),len:parseFloat(x&&x.len),temp:parseFloat(x&&x.temp)}));
+  SEL.forEach(id=>{const opts=[...$(id).options].map(o=>o.value); if(!opts.includes(merged[id])) merged[id]=EXAMPLE[id];});
+  S=merged; isExample=false; save(); renderSetup(); renderZones(); update();
+}
+$('wsSave').addEventListener('click',()=>{
+  const name=wsName.value.trim(); if(!name){msg('Enter a name, then save.','bad'); wsName.focus(); return;}
+  const all=wsAll(); const existed=!!all[name]; all[name]=packWorkspace(name);
+  if(wsPut(all)){wsRender(name); msg(existed?`Updated “${name}”.`:`Saved “${name}”.`,'ok');}
+  else msg('This browser blocked saving. Use Export file instead.','bad');
+});
+$('wsLoad').addEventListener('click',()=>{
+  const name=wsList.value; const all=wsAll(); if(!name||!all[name]) return;
+  try{applyWorkspace(all[name]); wsName.value=name; msg(`Loaded “${name}”.`,'ok');}catch(e){msg(e.message,'bad');}
+});
+let delArmed=false;
+function resetDel(){delArmed=false; $('wsDel').textContent='Delete';}
+$('wsList').addEventListener('change',resetDel);
+$('wsDel').addEventListener('click',()=>{
+  const name=wsList.value; if(!name) return;
+  if(!delArmed){delArmed=true; $('wsDel').textContent='Confirm delete'; msg(`Click Confirm delete to remove “${name}”.`); return;}
+  const all=wsAll(); delete all[name]; wsPut(all); wsRender(); msg(`Deleted “${name}”.`);
+});
+$('wsExport').addEventListener('click',()=>{
+  const name=wsName.value.trim()||'workspace';
+  const file=('wire-heater-'+name).replace(/[^\w\-]+/g,'_').replace(/_+/g,'_').slice(0,80)+'.json';
+  try{
+    const blob=new Blob([JSON.stringify(packWorkspace(name),null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=file; document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500);
+    msg(`Exported ${file}.`,'ok');
+  }catch(e){msg('This browser blocked the download.','bad');}
+});
+$('wsImportBtn').addEventListener('click',()=>$('wsImport').click());
+$('wsImport').addEventListener('change',e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{const obj=JSON.parse(rd.result); applyWorkspace(obj); wsName.value=(obj&&obj.name)||f.name.replace(/\.json$/i,''); msg(`Imported ${f.name}. Click Save to keep it in this browser.`,'ok');}
+    catch(err){msg(err instanceof SyntaxError?`${f.name} is not a valid workspace file.`:err.message,'bad');}
+    e.target.value='';
+  };
+  rd.onerror=()=>{msg(`Could not read ${f.name}.`,'bad'); e.target.value='';};
+  rd.readAsText(f);
+});
+
+renderSetup(); renderZones(); update(); wsRender();
 window.__calc=calc; window.__EX=EXAMPLE;
 })();
 </script>

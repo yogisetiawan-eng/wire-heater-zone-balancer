@@ -14,6 +14,12 @@ It runs entirely in the browser. There is no install, no server and no data uplo
 
 New power, new wire length in mm and its change from the test, wire load in W/m, serpentine pitch, predicted surface temperature and an estimated wire temperature. **Copy results for Sheets** copies the table as tab-separated text that pastes into Google Sheets or Excel.
 
+## Workspaces
+
+- **Save / Load / Delete:** keeps named workspaces (all setup and zone inputs) in your browser, for example one per test round.
+- **Export file / Import file:** saves the current workspace as a `.json` file and loads it back. Use this to keep a backup, move to another computer, or send a test to a colleague.
+- Your current inputs are also kept automatically, so reopening the page resumes where you left off. **Reset to example** clears them.
+
 ## Method
 
 1. **Test power per side:**
