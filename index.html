@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wire Heater Zone Balancer</title>
+<meta name="description" content="Rebalance silicone heater wire length per side from each side's area, wire ohm/m and measured surface temperature.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+/* Layout: instrument panel — setup rail on the left; zones in, results out, temperature strip below */
+:root{
+  --bg:#eceff3; --panel:#ffffff; --ink:#17202b; --muted:#5a6676; --line:#d3d9e1; --field:#f5f7f9;
+  --accent:#c2410c; --accent-ink:#ffffff; --cold:#1f6fcf; --ok:#1d8048; --hot:#c62828; --warn:#a45f00;
+  --band:rgba(29,128,72,.13);
+  --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10151c; --panel:#18202a; --ink:#e5eaf0; --muted:#98a4b4; --line:#2b3644; --field:#0f141a;
+  --accent:#f07a2e; --accent-ink:#1a0c02; --cold:#62a8f6; --ok:#52c385; --hot:#f27070; --warn:#e6a23c;
+  --band:rgba(82,195,133,.15); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10151c; --panel:#18202a; --ink:#e5eaf0; --muted:#98a4b4; --line:#2b3644; --field:#0f141a;
+  --accent:#f07a2e; --accent-ink:#1a0c02; --cold:#62a8f6; --ok:#52c385; --hot:#f27070; --warn:#e6a23c;
+  --band:rgba(82,195,133,.15); color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:1280px;margin:0 auto;padding-block:20px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 20px;border-bottom:2px solid var(--ink);padding-bottom:10px}
+h1{font-family:var(--f-display);font-weight:800;font-size:1.65rem;letter-spacing:-.01em;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:0;max-width:62ch}
+.grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;min-width:0}
+.main{display:grid;gap:18px;min-width:0}
+h2{font-family:var(--f-display);font-weight:600;font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;margin:0 0 12px;color:var(--muted)}
+fieldset{border:0;margin:0;padding:0;display:grid;gap:10px}
+fieldset+fieldset{margin-top:18px;padding-top:16px;border-top:1px dashed var(--line)}
+legend{font-weight:700;font-size:.9rem;margin-bottom:8px;padding:0}
+label.f{display:grid;grid-template-columns:1fr 118px;align-items:center;gap:10px;font-size:.92rem}
+label.f span small{display:block;color:var(--muted);font-size:.78rem;line-height:1.25}
+input,select{font:inherit;font-family:var(--f-mono);font-size:.88rem;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:4px;padding:6px 8px;width:100%;min-width:0}
+select{font-family:var(--f-body);font-size:.9rem}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[disabled]{opacity:.75}
+.unit{font-family:var(--f-mono);font-size:.75rem;color:var(--muted)}
+details summary{cursor:pointer;font-weight:700;font-size:.9rem}
+details[open] summary{margin-bottom:10px}
+
+.tbl-wrap{overflow-x:auto;margin:0 -4px;padding:0 4px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th{font-family:var(--f-display);font-weight:600;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:bottom}
+th:first-child,td:first-child{text-align:left}
+td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--f-mono);font-size:.86rem;white-space:nowrap}
+td small{display:block;color:var(--muted);font-size:.72rem}
+#zones td{padding:5px 4px}
+#zones input{width:100%;min-width:76px;text-align:right}
+#zones input.nm{text-align:left;min-width:96px}
+#zones input[type=color]{width:34px;min-width:34px;height:30px;padding:2px;cursor:pointer}
+.sidecell{display:flex;align-items:center;gap:8px}
+.sw{width:12px;height:12px;border-radius:2px;flex:none;border:1px solid var(--line)}
+button{font:inherit;font-weight:600;font-size:.88rem;cursor:pointer;border-radius:4px;padding:7px 12px;border:1px solid var(--line);background:var(--field);color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.x{padding:4px 8px;font-family:var(--f-mono);color:var(--muted)}
+.row-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.note{color:var(--muted);font-size:.82rem;margin:0}
+.example{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--warn);border:1px solid currentColor;border-radius:3px;padding:1px 6px;margin-left:8px;vertical-align:middle}
+
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.tile{background:var(--panel);padding:12px 14px;min-width:0}
+.tile .k{font-family:var(--f-display);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tile .v{font-family:var(--f-mono);font-weight:600;font-size:1.25rem;margin-top:2px;font-variant-numeric:tabular-nums}
+.tile .d{font-size:.8rem;color:var(--muted)}
+.pill{display:inline-block;font-family:var(--f-body);font-weight:700;font-size:.7rem;letter-spacing:.04em;padding:1px 7px;border-radius:999px;border:1px solid currentColor;margin-left:6px;vertical-align:1px}
+.c-cold{color:var(--cold)} .c-ok{color:var(--ok)} .c-hot{color:var(--hot)} .c-warn{color:var(--warn)}
+.pos{color:var(--hot)} .neg{color:var(--cold)}
+.errors{color:var(--hot);font-weight:600;margin:0}
+.errors:empty{display:none}
+
+svg text{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
+svg .lbl{fill:var(--ink);font-family:var(--f-body);font-size:12px;font-weight:600}
+svg .grid{stroke:var(--line);stroke-width:1}
+svg .band{fill:var(--band)}
+svg .bandedge{stroke:var(--ok);stroke-width:1;stroke-dasharray:3 3}
+svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.82rem;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.method{font-size:.88rem;color:var(--muted);max-width:75ch}
+.method p{margin:.4em 0}
+.method code{font-family:var(--f-mono);font-size:.82rem;color:var(--ink)}
+@media (prefers-reduced-motion:no-preference){.tile .v,td{transition:color .2s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Wire Heater Zone Balancer</h1>
+      <p class="sub">Enter each side's area, wire Ω/m and measured SS temperature from a test run. It redistributes the wire so every side lands at the same temperature.</p>
+    </div>
+    <button id="copy" type="button">Copy results for Sheets</button>
+  </header>
+
+  <div class="grid">
+    <aside class="panel">
+      <h2>Setup</h2>
+      <fieldset>
+        <legend>Test run (what you measured)</legend>
+        <label class="f"><span>Supply voltage</span><input id="vTest" type="number" step="0.1"></label>
+        <label class="f"><span>Room temperature<small>during the test, °C</small></span><input id="roomTest" type="number" step="0.1"></label>
+        <label class="f"><span>Wiring</span>
+          <select id="testWiring"><option value="series">One series string</option><option value="parallel">Separate string per side</option></select></label>
+        <label class="f"><span>Wire distribution</span>
+          <select id="testDist"><option value="area">Even by area</option><option value="manual">Length per side</option></select></label>
+        <label class="f" id="testTotalRow"><span>Total wire length<small>m, spread by area</small></span><input id="testTotalL" type="number" step="0.01"></label>
+      </fieldset>
+      <fieldset>
+        <legend>New layout</legend>
+        <label class="f"><span>Supply voltage</span><input id="vNew" type="number" step="0.1"></label>
+        <label class="f"><span>Ambient<small>operating, °C</small></span><input id="ambNew" type="number" step="0.1"></label>
+        <label class="f"><span>Wiring</span>
+          <select id="newWiring"><option value="series">One series string</option><option value="parallel">Separate string per side</option></select></label>
+        <label class="f"><span>Total power</span>
+          <select id="mode"><option value="same">Same as test</option><option value="target">Hit target temp</option><option value="custom">Custom watts</option></select></label>
+        <label class="f" id="targetRow"><span>Target SS temp<small>°C</small></span><input id="target" type="number" step="0.1"></label>
+        <label class="f" id="customRow"><span>Custom total<small>W</small></span><input id="customP" type="number" step="0.5"></label>
+        <label class="f"><span>Spec band<small>min °C</small></span><input id="bandMin" type="number" step="0.1"></label>
+        <label class="f"><span>Spec band<small>max °C</small></span><input id="bandMax" type="number" step="0.1"></label>
+      </fieldset>
+      <fieldset>
+        <details>
+          <summary>Advanced</summary>
+          <div style="display:grid;gap:10px">
+            <label class="f"><span>Correction gain k<small>1 = plain; 1.2–1.5 over-corrects for corner heat sharing</small></span><input id="k" type="number" step="0.05" min="0"></label>
+            <label class="f"><span>Loss exponent n<small>convection + radiation rise with ΔT</small></span><input id="n" type="number" step="0.01" min="0"></label>
+            <label class="f"><span>Wire-to-plate R′<small>m·K/W, taped under Al foil</small></span><input id="rth" type="number" step="0.1" min="0"></label>
+            <label class="f"><span>Wire OD<small>mm, for pitch check</small></span><input id="od" type="number" step="0.1" min="0"></label>
+          </div>
+        </details>
+      </fieldset>
+    </aside>
+
+    <div class="main">
+      <section class="panel">
+        <h2>Zones <span class="example" id="exTag">Example values</span></h2>
+        <div class="tbl-wrap">
+          <table id="zones">
+            <thead><tr>
+              <th>Side</th><th></th><th>Area<br><span class="unit">mm²</span></th><th>Wire<br><span class="unit">Ω/m</span></th>
+              <th>Test length<br><span class="unit">m</span></th><th>Measured SS<br><span class="unit">°C</span></th><th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="row-actions">
+          <button id="add" type="button">Add side</button>
+          <button id="reset" type="button">Reset to example</button>
+          <p class="note">Measure each side at steady state (≥ 1 h), at a comparable spot.</p>
+        </div>
+      </section>
+
+      <p class="errors" id="errors"></p>
+
+      <div class="tiles" id="tiles"></div>
+
+      <section class="panel">
+        <h2>New layout per side</h2>
+        <div class="tbl-wrap">
+          <table id="results">
+            <thead><tr>
+              <th>Side</th><th>Test power<br><span class="unit">W</span></th><th>Heat loss<br><span class="unit">W/K</span></th>
+              <th>New power<br><span class="unit">W</span></th><th>New length<br><span class="unit">mm</span></th><th>Change<br><span class="unit">mm</span></th>
+              <th>Wire load<br><span class="unit">W/m</span></th><th>Pitch<br><span class="unit">mm</span></th>
+              <th>Predicted SS<br><span class="unit">°C</span></th><th>Wire est.<br><span class="unit">°C</span></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>SS temperature per side</h2>
+        <div class="tbl-wrap"><svg id="chart" role="img" aria-label="Measured and predicted temperature per side"></svg></div>
+        <div class="legend">
+          <span><i style="border:2px solid var(--muted);background:transparent"></i>Measured (test)</span>
+          <span><i style="background:var(--ok)"></i>Predicted (new layout)</span>
+          <span><i style="background:var(--band);border-radius:2px"></i>Spec band</span>
+        </div>
+      </section>
+
+      <section class="method">
+        <h2>How it calculates</h2>
+        <p>Test power per side comes from the wiring. In one series string every side carries the same current, so <code>Pᵢ = I²·Ω/mᵢ·Lᵢ</code> with <code>I = V / ΣRᵢ</code>. With a separate string per side, <code>Pᵢ = V² / (Ω/mᵢ·Lᵢ)</code>. Each side's heat loss is <code>Gᵢ = Pᵢ / (Tᵢ − T_room)</code>.</p>
+        <p>Loss rises slightly faster than ΔT (convection and radiation), modelled as <code>Pᵢ = Gᵢ·ΔTᵢ,test^(−n)·ΔT^(1+n)</code>. The new power splits in proportion to <code>Gᵢ·ΔTᵢ,test^(−n)</code> (just <code>Gᵢ</code> when n = 0), so every side reaches the same temperature. Wire length then follows from the new power and supply voltage: series <code>R_total = V²/P</code>, <code>Lᵢ = R_total·(Pᵢ/P) / Ω/mᵢ</code>; separate strings <code>Lᵢ = V² / (Pᵢ·Ω/mᵢ)</code>.</p>
+        <p>Use full-on power for the test. If a thermostat or PID was cycling during the test, the real power was lower than calculated: the split between sides still holds, but the total watts in target mode will be overstated.</p>
+        <p>Neighbouring sides share heat at the corners, so the first correction is usually a little short. Rebuild, measure again, switch distribution to <em>Length per side</em>, enter the lengths you used and the new temperatures, and run it again. Raise gain k above 1 to correct harder in one step.</p>
+        <p>Wire estimate = predicted SS + wire load × R′. Pitch = area ÷ wire length for a serpentine. Both are estimates; check the silicone rating with your supplier.</p>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+const KEY='wire-heater-balancer-v1';
+const EXAMPLE={
+  vTest:48, roomTest:22, testWiring:'series', testDist:'area', testTotalL:6.4,
+  vNew:48, ambNew:19, newWiring:'series', mode:'same', target:38.5, customP:55,
+  bandMin:37, bandMax:40, k:1, n:0.12, rth:2.5, od:3,
+  sides:[
+    {name:'Top',    color:'#e02424', area:35950, rp:8, len:1.887, temp:36.2},
+    {name:'Right',  color:'#3b48c4', area:27950, rp:8, len:1.467, temp:35.1},
+    {name:'Bottom', color:'#f2d000', area:24950, rp:8, len:1.309, temp:31.9},
+    {name:'Left',   color:'#111111', area:33110, rp:8, len:1.738, temp:33.8}
+  ]
+};
+const clone=o=>JSON.parse(JSON.stringify(o));
+let S=clone(EXAMPLE), isExample=true;
+try{const raw=localStorage.getItem(KEY); if(raw){const p=JSON.parse(raw); if(p&&p.sides){S=Object.assign(clone(EXAMPLE),p.state||p); isExample=!!p.isExample;}}}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({state:S,isExample}))}catch(e){}}
+
+const $=id=>document.getElementById(id);
+const sum=a=>a.reduce((x,y)=>x+y,0);
+const fmt=(x,d=1)=>Number.isFinite(x)?x.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}):'—';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const NUM=['vTest','roomTest','testTotalL','vNew','ambNew','target','customP','bandMin','bandMax','k','n','rth','od'];
+const SEL=['testWiring','testDist','newWiring','mode'];
+
+function calc(s){
+  const sd=s.sides, err=[];
+  const area=sd.map(x=>+x.area), rp=sd.map(x=>+x.rp), T1=sd.map(x=>+x.temp);
+  const Atot=sum(area);
+  const L1=sd.map((x,i)=> s.testDist==='area' ? s.testTotalL*area[i]/Atot : +x.len);
+  sd.forEach((x,i)=>{
+    const nm=x.name||('Side '+(i+1));
+    if(!(area[i]>0)) err.push(nm+': area must be above 0.');
+    if(!(rp[i]>0)) err.push(nm+': wire Ω/m must be above 0.');
+    if(!(L1[i]>0)) err.push(nm+': test length must be above 0.');
+    if(!(T1[i]-s.roomTest>0)) err.push(nm+': measured temperature must be above the test room temperature.');
+  });
+  if(!(s.vTest>0)||!(s.vNew>0)) err.push('Supply voltage must be above 0.');
+  if(!Number.isFinite(+s.roomTest)) err.push('Enter the test room temperature.');
+  if(!Number.isFinite(+s.ambNew)) err.push('Enter the operating ambient.');  if(!sd.length) err.push('Add at least one side.');
+  if(err.length) return {err};
+
+  const R1=L1.map((l,i)=>l*rp[i]);
+  let P1, I1;
+  if(s.testWiring==='series'){I1=s.vTest/sum(R1); P1=R1.map(r=>I1*I1*r);}
+  else P1=R1.map(r=>s.vTest*s.vTest/r);
+  const dT1=T1.map(t=>t-s.roomTest);
+  const G=P1.map((p,i)=>p/dT1[i]);
+  const n=Math.max(0,+s.n||0), k=Number.isFinite(+s.k)?Math.max(0,+s.k):1, rth=Number.isFinite(+s.rth)?Math.max(0,+s.rth):0;
+  const base=G.map((g,i)=>g*Math.pow(dT1[i],-n));           // P = base · ΔT^(1+n)
+  const dTm=sum(dT1.map((d,i)=>d*area[i]))/Atot;
+  const w=base.map((b,i)=>b*Math.pow(dTm/dT1[i],k-1));
+  const share=w.map(x=>x/sum(w));
+  const P1tot=sum(P1);
+  let Ptot;
+  if(s.mode==='same') Ptot=P1tot;
+  else if(s.mode==='custom') Ptot=+s.customP;
+  else{
+    const dTn=s.target-s.ambNew;
+    if(!(dTn>0)) return {err:['Target temperature must be above the operating ambient.']};
+    Ptot=sum(base)*Math.pow(dTn,1+n);
+  }
+  if(!(Ptot>0)) return {err:['Total power must be above 0.']};
+  const P2=share.map(x=>x*Ptot);
+  const V=s.vNew;
+  let L2, q, I2, Rtot2;
+  if(s.newWiring==='series'){
+    Rtot2=V*V/Ptot; I2=Ptot/V;
+    L2=P2.map((p,i)=>(Rtot2*p/Ptot)/rp[i]);
+    q=rp.map(r=>I2*I2*r);
+  }else{
+    L2=P2.map((p,i)=>V*V/(p*rp[i]));
+    q=P2.map((p,i)=>p/L2[i]);
+    Rtot2=1/sum(L2.map((l,i)=>1/(l*rp[i]))); I2=Ptot/V;
+  }
+  const dT2=P2.map((p,i)=>Math.pow(p/base[i],1/(1+n)));
+  const T2=dT2.map(d=>s.ambNew+d);
+  const Tw=T2.map((t,i)=>t+q[i]*rth);
+  const pitch=L2.map((l,i)=>area[i]/(l*1000));
+  const rows=sd.map((x,i)=>({name:x.name||('Side '+(i+1)),color:x.color,P1:P1[i],G:G[i],P2:P2[i],L1:L1[i],L2:L2[i],q:q[i],pitch:pitch[i],T1:T1[i],T2:T2[i],Tw:Tw[i]}));
+  return {rows,P1tot,Ptot,Rtot2,I2,L1tot:sum(L1),L2tot:sum(L2),Gtot:sum(G),
+    spread1:Math.max(...T1)-Math.min(...T1),spread2:Math.max(...T2)-Math.min(...T2),
+    T2min:Math.min(...T2),T2max:Math.max(...T2)};
+}
+
+function bandOK(){return Number.isFinite(+S.bandMin)&&Number.isFinite(+S.bandMax)&&S.bandMax>S.bandMin}
+function tClass(t){if(!bandOK()) return ''; return t<S.bandMin?'c-cold':(t>S.bandMax?'c-hot':'c-ok')}
+function tLabel(t){if(!bandOK()) return ''; return t<S.bandMin?'below':(t>S.bandMax?'above':'in band')}
+
+function renderZones(){
+  const tb=$('zones').querySelector('tbody');
+  tb.innerHTML=S.sides.map((x,i)=>`<tr>
+    <td><input class="nm" id="nm${i}" data-i="${i}" data-f="name" value="${esc(x.name)}" aria-label="Side name"></td>
+    <td><input type="color" id="co${i}" data-i="${i}" data-f="color" value="${esc(x.color||'#888888')}" aria-label="Side colour"></td>
+    <td><input type="number" id="ar${i}" data-i="${i}" data-f="area" step="1" value="${x.area}" aria-label="Area mm²"></td>
+    <td><input type="number" id="rp${i}" data-i="${i}" data-f="rp" step="0.1" value="${x.rp}" aria-label="Wire Ω per m"></td>
+    <td><input type="number" id="ln${i}" data-i="${i}" data-f="len" step="0.001" value="${x.len}" aria-label="Test wire length m"></td>
+    <td><input type="number" id="tp${i}" data-i="${i}" data-f="temp" step="0.1" value="${x.temp}" aria-label="Measured SS °C"></td>
+    <td><button class="x" type="button" data-del="${i}" aria-label="Remove ${esc(x.name)}">✕</button></td></tr>`).join('');
+}
+function syncLenInputs(r){
+  S.sides.forEach((x,i)=>{const el=$('ln'+i); if(!el) return;
+    if(S.testDist==='area'){el.disabled=true; if(r&&r.rows) el.value=r.rows[i].L1.toFixed(3);} else el.disabled=false;});
+}
+function renderSetup(){
+  NUM.forEach(id=>$(id).value=S[id]); SEL.forEach(id=>$(id).value=S[id]);
+}
+function vis(){
+  $('testTotalRow').hidden=S.testDist!=='area';
+  $('targetRow').hidden=S.mode!=='target';
+  $('customRow').hidden=S.mode!=='custom';
+  $('exTag').hidden=!isExample;
+}
+
+function update(){
+  vis();
+  const r=calc(S);
+  syncLenInputs(r);
+  if(r.err){$('errors').textContent=r.err.join(' '); $('tiles').innerHTML=''; $('results').querySelector('tbody').innerHTML=''; $('chart').innerHTML=''; return;}
+  $('errors').textContent=bandOK()?'':'Spec band max must be above spec band min. The band is hidden until fixed.';
+  const inBand=r.T2min>=S.bandMin && r.T2max<=S.bandMax;
+  const cur = S.newWiring==='series' ? `${fmt(r.I2,2)} A` : `${fmt(r.I2,2)} A total`;
+  $('tiles').innerHTML=[
+    ['Total power',`${fmt(r.Ptot,1)} W`,`test ${fmt(r.P1tot,1)} W`],
+    ['Total wire',`${fmt(r.L2tot,3)} m`,`test ${fmt(r.L1tot,3)} m`],
+    [S.newWiring==='series'?'Resistance / current':'Combined R / current',`${fmt(r.Rtot2,1)} Ω`,cur+` at ${fmt(S.vNew,0)} V`],
+    ['Predicted SS',`<span class="${inBand?'c-ok':(r.T2min<S.bandMin?'c-cold':'c-hot')}">${fmt(r.T2min,1)}–${fmt(r.T2max,1)} °C</span>`,`spec ${fmt(S.bandMin,1)}–${fmt(S.bandMax,1)} °C at ${fmt(S.ambNew,1)} °C ambient`],
+    ['Side-to-side spread',`${fmt(r.spread2,1)} K`,`test ${fmt(r.spread1,1)} K`]
+  ].map(t=>`<div class="tile"><div class="k">${t[0]}</div><div class="v">${t[1]}</div><div class="d">${t[2]}</div></div>`).join('');
+
+  const minPitch=2*S.od;
+  $('results').querySelector('tbody').innerHTML=r.rows.map(x=>{
+    const dl=Math.round((x.L2-x.L1)*1000);
+    const pitchFlag = x.pitch<minPitch ? `<small class="c-hot">tighter than 2×OD</small>` : '';
+    const qFlag = x.q>25 ? `<small class="c-warn">high load</small>` : '';
+    const wFlag = x.Tw>180 ? `<small class="c-hot">over 180 °C</small>` : (x.Tw>150?`<small class="c-warn">near limit</small>`:'');
+    return `<tr>
+      <td><span class="sidecell"><span class="sw" style="background:${esc(x.color)}"></span>${esc(x.name)}</span></td>
+      <td>${fmt(x.P1,2)}</td><td>${fmt(x.G,3)}</td><td>${fmt(x.P2,2)}</td>
+      <td><b>${fmt(x.L2*1000,0)}</b></td>
+      <td class="${dl>0?'pos':(dl<0?'neg':'')}">${dl>0?'+':''}${fmt(dl,0)}<small>${x.L1>0?(dl>0?'+':'')+fmt((x.L2-x.L1)*100/x.L1,1)+' %':''}</small></td>
+      <td>${fmt(x.q,1)}${qFlag}</td><td>${fmt(x.pitch,1)}${pitchFlag}</td>
+      <td class="${tClass(x.T2)}">${fmt(x.T2,1)}<small>${tLabel(x.T2)}</small></td>
+      <td>${fmt(x.Tw,0)}${wFlag}</td></tr>`;}).join('');
+  drawChart(r);
+  window.__last=r;
+}
+
+function drawChart(r){
+  const svg=$('chart'), rows=r.rows, W=640, padL=92, padR=24, rowH=40, top=26, H=top+rows.length*rowH+12;
+  const bOK=bandOK();
+  const vals=rows.flatMap(x=>[x.T1,x.T2]).concat(bOK?[S.bandMin,S.bandMax]:[]);
+  let lo=Math.floor(Math.min(...vals)-1), hi=Math.ceil(Math.max(...vals)+1);
+  if(hi-lo<4){hi=lo+4}
+  const X=t=>padL+(t-lo)/(hi-lo)*(W-padL-padR);
+  const step=(hi-lo)>14?2:1;
+  let g='';
+  if(bOK){g+=`<rect class="band" x="${X(S.bandMin)}" y="${top-6}" width="${Math.max(0,X(S.bandMax)-X(S.bandMin))}" height="${rows.length*rowH+6}"/>`;
+  g+=`<line class="bandedge" x1="${X(S.bandMin)}" x2="${X(S.bandMin)}" y1="${top-6}" y2="${top+rows.length*rowH}"/><line class="bandedge" x1="${X(S.bandMax)}" x2="${X(S.bandMax)}" y1="${top-6}" y2="${top+rows.length*rowH}"/>`;}
+  for(let t=lo;t<=hi;t+=step){g+=`<line class="grid" x1="${X(t)}" x2="${X(t)}" y1="${top-6}" y2="${top+rows.length*rowH}" opacity=".6"/><text x="${X(t)}" y="${top-12}" text-anchor="middle">${t}</text>`;}
+  rows.forEach((x,i)=>{
+    const y=top+i*rowH+rowH/2;
+    g+=`<rect x="8" y="${y-6}" width="12" height="12" rx="2" fill="${esc(x.color)}" stroke="var(--line)"/>`;
+    g+=`<text class="lbl" x="26" y="${y+4}">${esc(x.name)}</text>`;
+    const x1=X(x.T1), x2=X(x.T2);
+    if(Math.abs(x2-x1)>12){const dir=x2>x1?1:-1; g+=`<path class="arrow" d="M${x1+dir*7} ${y} L${x2-dir*9} ${y} M${x2-dir*14} ${y-4} L${x2-dir*9} ${y} L${x2-dir*14} ${y+4}"/>`;}
+    g+=`<circle cx="${x1}" cy="${y}" r="5.5" fill="var(--panel)" stroke="var(--muted)" stroke-width="2"/>`;
+    const cls=tClass(x.T2)==='c-ok'?'var(--ok)':(tClass(x.T2)==='c-cold'?'var(--cold)':'var(--hot)');
+    g+=`<circle cx="${x2}" cy="${y}" r="6" fill="${cls}"/>`;
+  });
+  g+=`<text x="${W-padR}" y="${H-2}" text-anchor="end">°C</text>`;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.setAttribute('width','100%'); svg.style.minWidth='420px'; svg.style.display='block';
+  svg.innerHTML=g;
+}
+
+// events
+NUM.forEach(id=>$(id).addEventListener('input',e=>{S[id]=parseFloat(e.target.value); markEdited(); save(); update();}));
+SEL.forEach(id=>$(id).addEventListener('change',e=>{
+  if(id==='testDist' && e.target.value==='manual'){const r=calc(S); if(r.rows) S.sides.forEach((x,i)=>x.len=+r.rows[i].L1.toFixed(3));}
+  S[id]=e.target.value; markEdited(); save(); update();}));
+$('zones').addEventListener('input',e=>{
+  const el=e.target, i=+el.dataset.i, f=el.dataset.f; if(!f) return;
+  S.sides[i][f]=(f==='name'||f==='color')?el.value:parseFloat(el.value);
+  markEdited(); save(); update();
+});
+$('zones').addEventListener('click',e=>{
+  const b=e.target.closest('[data-del]'); if(!b) return;
+  S.sides.splice(+b.dataset.del,1); markEdited(); save(); renderZones(); update();
+});
+$('add').addEventListener('click',()=>{
+  const last=S.sides[S.sides.length-1]||{area:25000,rp:8,len:1.5,temp:35};
+  S.sides.push({name:'Side '+(S.sides.length+1),color:'#7a8699',area:last.area,rp:last.rp,len:last.len,temp:last.temp});
+  markEdited(); save(); renderZones(); update();
+});
+$('reset').addEventListener('click',()=>{S=clone(EXAMPLE); isExample=true; save(); renderSetup(); renderZones(); update();});
+function markEdited(){isExample=false;}
+
+$('copy').addEventListener('click',()=>{
+  const r=window.__last; const b=$('copy');
+  if(!r||!r.rows){b.textContent='Fix the inputs first'; setTimeout(()=>b.textContent='Copy results for Sheets',1600); return;}
+  const head=['Side','Area (mm2)','Wire (ohm/m)','Test length (m)','Measured SS (C)','Test power (W)','Heat loss (W/K)','New power (W)','New length (mm)','Change (mm)','Wire load (W/m)','Pitch (mm)','Predicted SS (C)','Wire est (C)'];
+  const lines=[head.join('\t')].concat(r.rows.map((x,i)=>[x.name,S.sides[i].area,S.sides[i].rp,x.L1.toFixed(3),x.T1,x.P1.toFixed(2),x.G.toFixed(4),x.P2.toFixed(2),(x.L2*1000).toFixed(0),((x.L2-x.L1)*1000).toFixed(0),x.q.toFixed(2),x.pitch.toFixed(1),x.T2.toFixed(1),x.Tw.toFixed(0)].join('\t')));
+  lines.push(['Total',sum(S.sides.map(x=>+x.area)),'',r.L1tot.toFixed(3),'',r.P1tot.toFixed(2),r.Gtot.toFixed(4),r.Ptot.toFixed(2),(r.L2tot*1000).toFixed(0),((r.L2tot-r.L1tot)*1000).toFixed(0)].join('\t'));
+  const txt=lines.join('\n');
+  const done=()=>{b.textContent='Copied'; setTimeout(()=>b.textContent='Copy results for Sheets',1600);};
+  const fallback=()=>{const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); let ok=false; try{ok=document.execCommand('copy')}catch(e){} ta.remove(); if(ok) done(); else {b.textContent='Copy blocked here';setTimeout(()=>b.textContent='Copy results for Sheets',1600);}};
+  try{navigator.clipboard.writeText(txt).then(done,fallback);}catch(e){fallback();}
+});
+
+renderSetup(); renderZones(); update();
+window.__calc=calc; window.__EX=EXAMPLE;
+})();
+</script>
+</body>
+</html>
