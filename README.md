@@ -8,9 +8,11 @@ It runs entirely in the browser. There is no install, no server and no data uplo
 
 ## Workflow
 
-1. **Design from wattage, target and wire.** Enter the heater power, target temperature and wire Ω/m. The total wire length follows from the power: in series `R = V²/P`, `L = R / Ω/m`. That wire is shared between the zones in proportion to each zone's heat loss at the target, so every zone runs at the same temperature. The heat loss is natural convection on a vertical surface (Churchill–Chu) plus radiation at your emissivity, times an extra loss factor for mounts and attached panels. Alternatively the wire can be spread evenly by area. Leave the power empty to size it for the target from physics. The step card shows the temperature the physics expects at your wattage.
+1. **Design for the target.** Enter the target temperature, operating ambient and wire Ω/m. The heater power is calculated from the target. Each section's surface loss at the target is natural convection on a vertical surface (Churchill–Chu) plus radiation at your emissivity, times an extra loss factor for mounts and attached panels. The total wire then follows from the power and supply: in series `R = V²/P`, `L = R / Ω/m`. That wire is shared between the zones in proportion to each zone's heat loss, so every zone runs at the target. You can choose to spread it evenly by area instead.
 2. **Measure actual.** Build that layout, run it at full power and enter T1–T3 per side. The design locks as built at the first reading, so later changes to the target or losses don't move the test layout. The estimate is shown under each reading, and the step card reports the extra loss factor that would make the estimate match. Use that factor for your next design.
 3. **Adjusted layout.** Each section's real heat loss is calibrated from the readings, including heat shared through the plate. The wire per section is then recalculated to hold the target. If the readings match the estimate, the adjusted layout is the same as the design.
+
+Heater power is not an input: power and target can't both be fixed, so the app always sizes the power for the target. The first test then shows how far the real frame differs, and step 3 corrects every zone.
 
 **Fill readings with estimate** shows what the adjusted step would do with perfect readings. **Clear readings** empties the probe inputs for a new test.
 

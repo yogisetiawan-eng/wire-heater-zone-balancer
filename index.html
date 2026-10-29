@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Wire Heater Zone Balancer</title>
-<meta name="description" content="Design heater wire per side from wattage, target temperature and wire ohm/m, then correct each zone from three probe readings per side.">
+<meta name="description" content="Design heater wire per side for a target temperature, then correct each zone from three probe readings per side.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -128,6 +128,9 @@ figcaption span{font-weight:400;color:var(--muted);font-family:var(--f-mono);fon
 .step .d{font-size:.82rem;color:var(--muted)}
 .step.done{border-color:var(--ok)} .step.done .n{color:var(--ok)}
 .step.wait{opacity:.85}
+.calc{font-family:var(--f-mono);font-size:.88rem;font-weight:600;padding:6px 8px;border:1px dashed var(--line);border-radius:4px;text-align:right;min-width:0}
+div.f{display:grid;grid-template-columns:1fr 132px;align-items:center;gap:10px;font-size:.92rem}
+div.f span small{display:block;color:var(--muted);font-size:.78rem;line-height:1.25}
 .step .fix{line-height:1.45}
 .step .fix button{padding:3px 9px;font-size:.8rem;margin:6px 6px 0 0}
 #zones small.est{display:block;text-align:right;font-family:var(--f-mono);font-size:.72rem;color:var(--muted);padding:2px 2px 0}
@@ -179,7 +182,7 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
         <label class="f"><span>Supply voltage<small>V</small></span><input id="vTest" type="number" step="0.1"></label>
         <label class="f"><span>Wiring</span>
           <select id="testWiring"><option value="series">One series string</option><option value="parallel">One string per side</option></select></label>
-        <label class="f"><span>Heater power<small>W, total; leave empty to size it for the target</small></span><input id="designP" type="number" step="0.5" min="0" placeholder="auto"></label>
+        <div class="f"><span>Heater power<small>calculated for the target</small></span><output class="calc" id="designPout" aria-live="polite">—</output></div>
         <label class="f"><span>Wire split<small>how the wire is shared between zones</small></span>
           <select id="testDist"><option value="design">By zone heat loss at target</option><option value="area">Even by area</option><option value="manual">Length per section (entered)</option></select></label>
         <label class="f"><span>Room temperature<small>during the test, °C</small></span><input id="roomTest" type="number" step="0.1"></label>
@@ -286,7 +289,7 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
 
       <section class="method">
         <h2>How it calculates</h2>
-        <p><b>Workflow.</b> 1 · Design: the heater power sets the total wire (series <code>R = V²/P</code>, <code>L = R / Ω/m</code>), shared between sections by their surface loss at the target (convection + radiation × extra loss factor; at a uniform temperature no heat flows between sections) or evenly by area. Leave the power empty to size it for the target. 2 · Build that layout, run it at full power and enter the measured probes; the design locks as built at the first reading. 3 · Adjusted layout: each section's real heat loss is calibrated from the readings and the wire is recalculated to hold the target. If the readings match the estimate, the adjusted layout equals the design.</p>
+        <p><b>Workflow.</b> 1 · Design: the heater power is calculated from the target, as the sum of each section's surface loss at the target (convection + radiation × extra loss factor; at a uniform temperature no heat flows between sections). The total wire follows from that power (series <code>R = V²/P</code>, <code>L = R / Ω/m</code>) and is shared between sections by their heat loss, or evenly by area. 2 · Build that layout, run it at full power and enter the measured probes; the design locks as built at the first reading. 3 · Adjusted layout: each section's real heat loss is calibrated from the readings and the wire is recalculated to hold the target. If the readings match the estimate, the adjusted layout equals the design.</p>
         <p><b>Estimate.</b> Each section loses heat by natural convection on a vertical surface (Churchill–Chu, with the strip's vertical extent as the length: width for top and bottom, length for left and right) plus radiation <code>ε·σ·(Ts²+Ta²)(Ts+Ta)</code>, from the front face or both faces, times the extra loss factor. Sections share heat through the plate as below. Mounts and attached panels usually drain much more heat than the surface alone: step 2 shows the factor that would make the estimate match your readings, so you can use it for the next design.</p>
         <p><b>Sections.</b> Each side is split into three equal sections, one per probe, so a frame of four sides becomes twelve sections. Test power per section follows from the wiring: in one series string every section carries <code>I = V / ΣRᵢ</code>, so <code>Pᵢ = I²·Ω/m·Lᵢ</code>; with one string per side the current is <code>V / (Ω/m·L_side)</code>.</p>
         <p><b>Heat sharing.</b> Neighbouring sections exchange heat through the plate: <code>Kᵢⱼ = k·t·width / spacing</code>, summed over the front and backing plates, with corner links when the sides form a closed frame. Each section's own loss to the room is then <code>Gᵢ = (Pᵢ − Σ Kᵢⱼ·(Tᵢ − Tⱼ)) / (Tᵢ − T_room)</code>. This takes out the heat a section only passes along to its neighbours, which the simple one-probe method could not.</p>
@@ -302,19 +305,19 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
 (function(){
 const KEY='wire-heater-balancer-v2', KEY_V1='wire-heater-balancer-v1', WSKEY='wire-heater-balancer-workspaces-v1';
 const EXAMPLE={
-  vTest:48, roomTest:22, testWiring:'series', testDist:'design', testTotalL:6.4, designP:45,
+  vTest:48, roomTest:22, testWiring:'series', testDist:'design', testTotalL:6.4,
   t1:2, k1:16, t2:0, k2:205, ring:'yes',
   vNew:48, ambNew:19, newWiring:'series', pitchMode:'graded', mode:'target', target:38.5, customP:55,
   bandMin:37, bandMax:40, n:0.12, rth:2.5, od:3, showWire:true, showProbes:true,
   eps:0.3, faces:'front', lossMult:1, leftMap:'measured', locked:false,
   sides:[
-    {name:'Top',    color:'#e02424', length:495, width:73, rp:15, wire:[0.365,0.365,0.365], T:[38.6,39.4,38.9]},
-    {name:'Right',  color:'#3b48c4', length:400, width:70, rp:15, wire:[0.235,0.235,0.235], T:[38.8,38.4,37.2]},
-    {name:'Bottom', color:'#f2d000', length:426, width:59, rp:15, wire:[0.263,0.263,0.263], T:[36.5,35.9,36.4]},
-    {name:'Left',   color:'#111111', length:475, width:70, rp:15, wire:[0.275,0.275,0.275], T:[36.9,37.5,38.6]}
+    {name:'Top',    color:'#e02424', length:495, width:73, rp:15, wire:[1.023,1.023,1.023], T:[29.2,29.9,29.4]},
+    {name:'Right',  color:'#3b48c4', length:400, width:70, rp:15, wire:[0.658,0.658,0.658], T:[29.3,29.0,27.9]},
+    {name:'Bottom', color:'#f2d000', length:426, width:59, rp:15, wire:[0.737,0.737,0.737], T:[27.2,26.6,27.0]},
+    {name:'Left',   color:'#111111', length:475, width:70, rp:15, wire:[0.772,0.772,0.772], T:[27.6,28.1,29.2]}
   ]
 };
-const NUM=['vTest','roomTest','designP','t1','k1','t2','k2','vNew','ambNew','target','customP','bandMin','bandMax','n','rth','od','eps','lossMult'];
+const NUM=['vTest','roomTest','t1','k1','t2','k2','vNew','ambNew','target','customP','bandMin','bandMax','n','rth','od','eps','lossMult'];
 const SEL=['testWiring','testDist','ring','newWiring','pitchMode','mode','faces','leftMap'];
 const CHK=['showWire','showProbes'];
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -545,7 +548,7 @@ function calc(s){
 // Leave the power empty to size it for the target from physics.
 function design(s){
   const sd=s.sides||[], N=sd.length, M=3*N, Tt=+s.target, Ta=+s.ambNew, V=+s.vTest;
-  const Pset=(+s.designP>0)?+s.designP:null, byLoss=s.testDist!=='area';
+  const Pset=null, byLoss=s.testDist!=='area';
   if(!N) return {err:'Add at least one side.'};
   if(!(V>0)) return {err:'Supply voltage must be above 0.'};
   const haveT=Number.isFinite(Tt)&&Number.isFinite(Ta)&&Tt>Ta;
@@ -791,13 +794,10 @@ function renderSteps(E,r){
     const mean=sum(EA.T)/EA.T.length, off=mean-S.target, spread=EA.Tmax-EA.Tmin;
     const outBand=bandOK()&&(EA.Tmax>S.bandMax||EA.Tmin<S.bandMin);
     let w='';
-    if(Math.abs(off)>0.5||outBand){
-      const Dt=design(Object.assign({},S,{designP:NaN,testDist:'design'}));
-      const mult=(+S.lossMult>0)?+S.lossMult:1, fac=Dt.PphysTot>0?mult*EA.P1tot/Dt.PphysTot:NaN;
-      w+=`<b>Off target.</b> At ${fmt(EA.P1tot,1)} W the physics expects ${fmt(EA.Tmin,1)}–${fmt(EA.Tmax,1)} °C at ${fmt(S.ambNew,1)} °C ambient, ${fmt(Math.abs(off),1)} K ${off>0?'above':'below'} the ${fmt(S.target,1)} °C target.`;
-      if(Dt.PphysTot>0) w+=`<br><button type="button" data-act="sizeP" data-p="${Dt.PphysTot.toFixed(1)}">Use ${fmt(Dt.PphysTot,1)} W for ${fmt(S.target,1)} °C</button>`;
-      if(Number.isFinite(fac)) w+=`<button type="button" data-act="fitLoss" data-f="${fac.toFixed(2)}">Keep ${fmt(EA.P1tot,1)} W: losses are ×${fmt(fac,2)}</button>`;
-      w+=`<br>Pick the first if you trust the surface physics. Pick the second if you know the frame loses more heat (mounts, attached panel); your first test will tell you which.`;
+    if(Math.abs(off)<=0.5&&outBand){
+      w+=`<b>Outside the spec band.</b> The built layout is expected at ${fmt(EA.Tmin,1)}–${fmt(EA.Tmax,1)} °C; the average is on target but some zones run hotter or colder. Step 3 corrects it from your readings.`;
+    }else if(Math.abs(off)>0.5){
+      w+=`<b>Off target.</b> The built layout (${fmt(EA.P1tot,1)} W) is expected at ${fmt(EA.Tmin,1)}–${fmt(EA.Tmax,1)} °C at ${fmt(S.ambNew,1)} °C ambient, ${fmt(Math.abs(off),1)} K ${off>0?'above':'below'} the ${fmt(S.target,1)} °C target. Step 3 corrects it from your readings.`;
     }
     if(spread>1.5&&S.testDist!=='design') w+=`${w?'<br>':''}<b>Uneven split.</b> This layout runs ${fmt(spread,1)} K hotter on some sides. <button type="button" data-act="byLoss">Split by zone heat loss</button>`;
     if(w) s1=s1.replace(/<\/div>$/,`<div class="d c-warn fix">${w}</div></div>`);
@@ -828,6 +828,7 @@ function renderSteps(E,r){
 function update(){
   vis();
   window.__design=design(S);
+  {const D=window.__design; $('designPout').textContent=D.L?`${fmt(D.Ptot,1)} W · ${fmt(D.I,2)} A`:'—';}
   const E=estimate(S); window.__est=E;
   renderEst(E);
   const r=calc(S);
