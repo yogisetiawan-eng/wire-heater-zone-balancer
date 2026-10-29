@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Wire Heater Zone Balancer</title>
-<meta name="description" content="Design heater wire per side for a target temperature, then correct each zone from three probe readings per side.">
+<meta name="description" content="Design heater wire per side from wattage, target temperature and wire ohm/m, then correct each zone from three probe readings per side.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -177,9 +177,9 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
         <label class="f"><span>Supply voltage<small>V</small></span><input id="vTest" type="number" step="0.1"></label>
         <label class="f"><span>Wiring</span>
           <select id="testWiring"><option value="series">One series string</option><option value="parallel">One string per side</option></select></label>
-        <label class="f"><span>Wire laid</span>
-          <select id="testDist"><option value="design">From target design</option><option value="area">Even by area</option><option value="manual">Length per section</option></select></label>
-        <label class="f" id="testTotalRow"><span>Total wire length<small>m, spread evenly by area</small></span><input id="testTotalL" type="number" step="0.01"></label>
+        <label class="f"><span>Heater power<small>W, total; leave empty to size it for the target</small></span><input id="designP" type="number" step="0.5" min="0" placeholder="auto"></label>
+        <label class="f"><span>Wire split<small>how the wire is shared between zones</small></span>
+          <select id="testDist"><option value="design">By zone heat loss at target</option><option value="area">Even by area</option><option value="manual">Length per section (entered)</option></select></label>
         <label class="f"><span>Room temperature<small>during the test, °C</small></span><input id="roomTest" type="number" step="0.1"></label>
       </fieldset>
       <fieldset>
@@ -284,7 +284,7 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
 
       <section class="method">
         <h2>How it calculates</h2>
-        <p><b>Workflow.</b> 1 · Design: from the target temperature and operating ambient, each section gets the power its surface loses at the target (convection + radiation × extra loss factor; at a uniform temperature no heat flows between sections), and the wire length per section follows from the test supply and wiring. 2 · Build that layout, run it at full power and enter the measured probes; the design locks as built at the first reading. 3 · Adjusted layout: each section's real heat loss is calibrated from the readings and the wire is recalculated to hold the target. If the readings match the estimate, the adjusted layout equals the design.</p>
+        <p><b>Workflow.</b> 1 · Design: the heater power sets the total wire (series <code>R = V²/P</code>, <code>L = R / Ω/m</code>), shared between sections by their surface loss at the target (convection + radiation × extra loss factor; at a uniform temperature no heat flows between sections) or evenly by area. Leave the power empty to size it for the target. 2 · Build that layout, run it at full power and enter the measured probes; the design locks as built at the first reading. 3 · Adjusted layout: each section's real heat loss is calibrated from the readings and the wire is recalculated to hold the target. If the readings match the estimate, the adjusted layout equals the design.</p>
         <p><b>Estimate.</b> Each section loses heat by natural convection on a vertical surface (Churchill–Chu, with the strip's vertical extent as the length: width for top and bottom, length for left and right) plus radiation <code>ε·σ·(Ts²+Ta²)(Ts+Ta)</code>, from the front face or both faces, times the extra loss factor. Sections share heat through the plate as below. Mounts and attached panels usually drain much more heat than the surface alone: step 2 shows the factor that would make the estimate match your readings, so you can use it for the next design.</p>
         <p><b>Sections.</b> Each side is split into three equal sections, one per probe, so a frame of four sides becomes twelve sections. Test power per section follows from the wiring: in one series string every section carries <code>I = V / ΣRᵢ</code>, so <code>Pᵢ = I²·Ω/m·Lᵢ</code>; with one string per side the current is <code>V / (Ω/m·L_side)</code>.</p>
         <p><b>Heat sharing.</b> Neighbouring sections exchange heat through the plate: <code>Kᵢⱼ = k·t·width / spacing</code>, summed over the front and backing plates, with corner links when the sides form a closed frame. Each section's own loss to the room is then <code>Gᵢ = (Pᵢ − Σ Kᵢⱼ·(Tᵢ − Tⱼ)) / (Tᵢ − T_room)</code>. This takes out the heat a section only passes along to its neighbours, which the simple one-probe method could not.</p>
@@ -300,19 +300,19 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
 (function(){
 const KEY='wire-heater-balancer-v2', KEY_V1='wire-heater-balancer-v1', WSKEY='wire-heater-balancer-workspaces-v1';
 const EXAMPLE={
-  vTest:48, roomTest:22, testWiring:'series', testDist:'design', testTotalL:6.4,
+  vTest:48, roomTest:22, testWiring:'series', testDist:'design', testTotalL:6.4, designP:45,
   t1:2, k1:16, t2:0, k2:205, ring:'yes',
   vNew:48, ambNew:19, newWiring:'series', pitchMode:'graded', mode:'target', target:38.5, customP:55,
   bandMin:37, bandMax:40, n:0.12, rth:2.5, od:3, showWire:true, showProbes:true,
   eps:0.3, faces:'front', lossMult:1, leftMap:'measured', locked:false,
   sides:[
-    {name:'Top',    color:'#e02424', length:495, width:73, rp:15, wire:[1.024,1.024,1.024], T:[29.2,29.9,29.4]},
-    {name:'Right',  color:'#3b48c4', length:400, width:70, rp:15, wire:[0.658,0.658,0.658], T:[29.3,29.0,27.9]},
-    {name:'Bottom', color:'#f2d000', length:426, width:59, rp:15, wire:[0.737,0.737,0.737], T:[27.2,26.6,27.0]},
-    {name:'Left',   color:'#111111', length:475, width:70, rp:15, wire:[0.772,0.772,0.772], T:[27.6,28.1,29.2]}
+    {name:'Top',    color:'#e02424', length:495, width:73, rp:15, wire:[0.365,0.365,0.365], T:[38.6,39.4,38.9]},
+    {name:'Right',  color:'#3b48c4', length:400, width:70, rp:15, wire:[0.235,0.235,0.235], T:[38.8,38.4,37.2]},
+    {name:'Bottom', color:'#f2d000', length:426, width:59, rp:15, wire:[0.263,0.263,0.263], T:[36.5,35.9,36.4]},
+    {name:'Left',   color:'#111111', length:475, width:70, rp:15, wire:[0.275,0.275,0.275], T:[36.9,37.5,38.6]}
   ]
 };
-const NUM=['vTest','roomTest','testTotalL','t1','k1','t2','k2','vNew','ambNew','target','customP','bandMin','bandMax','n','rth','od','eps','lossMult'];
+const NUM=['vTest','roomTest','designP','t1','k1','t2','k2','vNew','ambNew','target','customP','bandMin','bandMax','n','rth','od','eps','lossMult'];
 const SEL=['testWiring','testDist','ring','newWiring','pitchMode','mode','faces','leftMap'];
 const CHK=['showWire','showProbes'];
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -338,6 +338,11 @@ function migrate(st){
       length:a>0?Math.round(a/w):NaN,width:w,rp:parseFloat(x.rp),wire:[l/3,l/3,l/3],T:[t,t,t]};
   });
   if(sides.some(x=>x&&!Array.isArray(x.T)) && st.testDist==null) out.testDist='manual';
+  if(st.designP===undefined && st.testDist==='design') out.designP=NaN;
+  if(out.testDist==='area' && !(parseFloat(st.designP)>0) && parseFloat(st.testTotalL)>0 && out.sides.length){
+    const rpm=out.sides.reduce((a,x)=>a+(+x.rp||0),0)/out.sides.length;
+    if(rpm>0 && +out.vTest>0) out.designP=+((+out.vTest)**2/(rpm*parseFloat(st.testTotalL))).toFixed(2);
+  }
   NUM.forEach(id=>{out[id]=parseFloat(out[id]);});
   SEL.forEach(id=>{const opts=[...$(id).options].map(o=>o.value); if(!opts.includes(out[id])) out[id]=EXAMPLE[id];});
   CHK.forEach(id=>{out[id]=out[id]!==false;});
@@ -391,9 +396,8 @@ function calc(s){
   if(!(s.vTest>0)||!(s.vNew>0)) err.push('Supply voltage must be above 0.');
   if(!Number.isFinite(+s.roomTest)) err.push('Enter the test room temperature.');
   if(!Number.isFinite(+s.ambNew)) err.push('Enter the operating ambient.');
-  if(s.testDist==='area' && !(s.testTotalL>0)) err.push('Total wire length must be above 0.');
   const N=sd.length, M=3*N;
-  const areaSide=sd.map(x=>(+x.length)*(+x.width)), Atot=sum(areaSide), DZ=s.testDist==='design'?design(s):null;
+  const areaSide=sd.map(x=>(+x.length)*(+x.width)), Atot=sum(areaSide), DZ=s.testDist!=='manual'?design(s):null;
   const segA=[],side=[],L1=[],T1=[],pos=[],rp=[];
   sd.forEach((x,si)=>{
     const nm=x.name||('Side '+(si+1));
@@ -401,7 +405,7 @@ function calc(s){
     if(!(+x.width>0)) err.push(nm+': width must be above 0.');
     if(!(+x.rp>0)) err.push(nm+': wire Ω/m must be above 0.');
     for(let j=0;j<3;j++){
-      const l=DZ?(DZ.L?DZ.L[3*si+j]:NaN):s.testDist==='area'?s.testTotalL*areaSide[si]/Atot/3:+(x.wire||[])[j];
+      const l=DZ?(DZ.L?DZ.L[3*si+j]:NaN):+(x.wire||[])[j];
       const t=+(x.T||[])[j];
       if(s.testDist==='manual' && !(l>0)) err.push(`${nm} S${j+1}: test wire must be above 0.`);
       if(!Number.isFinite(t)) err.push('__blank__');
@@ -533,27 +537,44 @@ function calc(s){
     spread1:Math.max(...T1)-Math.min(...T1),spread2:Math.max(...T2)-Math.min(...T2),T2min:Math.min(...T2),T2max:Math.max(...T2)};
 }
 
-// ---------- step 1: design the wire for the target ----------
-// At a uniform temperature no heat flows between sections, so each section needs exactly its own surface loss.
+// ---------- step 1: design the wire ----------
+// Total wire from the heater power: series R = V²/P. Split between sections either by each section's
+// surface loss at the target (at a uniform temperature no heat flows between sections) or evenly by area.
+// Leave the power empty to size it for the target from physics.
 function design(s){
   const sd=s.sides||[], N=sd.length, M=3*N, Tt=+s.target, Ta=+s.ambNew, V=+s.vTest;
+  const Pset=(+s.designP>0)?+s.designP:null, byLoss=s.testDist!=='area';
   if(!N) return {err:'Add at least one side.'};
-  if(!Number.isFinite(Tt)||!Number.isFinite(Ta)||!(Tt>Ta)) return {err:'Step 1 needs a target temperature above the operating ambient.'};
   if(!(V>0)) return {err:'Supply voltage must be above 0.'};
+  const haveT=Number.isFinite(Tt)&&Number.isFinite(Ta)&&Tt>Ta;
+  if(!haveT&&(byLoss||!Pset)) return {err:'Step 1 needs a target temperature above the operating ambient'+(Pset?'.':', or a heater power.')};
   const eps=Number.isFinite(+s.eps)?Math.min(1,Math.max(0,+s.eps)):0.3, faces=s.faces==='both'?2:1, mult=(+s.lossMult>0)?+s.lossMult:1;
-  const P=[], rp=[], side=[]; let hc=0, hr=0, At=0;
+  const Pphys=[], rp=[], A=[]; let hc=0, hr=0, At=0;
   for(let si=0;si<N;si++){
     const x=sd[si], nm=x.name||('Side '+(si+1));
     if(!(+x.length>0&&+x.width>0&&+x.rp>0)) return {err:`${nm}: enter length, width and wire Ω/m.`};
-    const vertical=N===4&&si%2===1, Lchar=(vertical?+x.length:+x.width)/1000, A=(+x.length)*(+x.width)/3/1e6;
-    const h=hSurf(Ta,Tt,Lchar,eps);
-    for(let j=0;j<3;j++){P.push(mult*faces*A*(h.hc+h.hr)*(Tt-Ta)); rp.push(+x.rp); side.push(si); hc+=h.hc*A; hr+=h.hr*A; At+=A;}
+    const vertical=N===4&&si%2===1, Lchar=(vertical?+x.length:+x.width)/1000, a=(+x.length)*(+x.width)/3/1e6;
+    const h=haveT?hSurf(Ta,Tt,Lchar,eps):{hc:NaN,hr:NaN};
+    for(let j=0;j<3;j++){Pphys.push(mult*faces*a*(h.hc+h.hr)*(Tt-Ta)); rp.push(+x.rp); A.push(a); hc+=h.hc*a; hr+=h.hr*a; At+=a;}
   }
-  const Ptot=sum(P), L=new Array(M);
-  if(s.testWiring==='series'){const R=V*V/Ptot; for(let i=0;i<M;i++) L[i]=(R*P[i]/Ptot)/rp[i];}
-  else for(let si=0;si<N;si++){const Ps=P[3*si]+P[3*si+1]+P[3*si+2], Ls=V*V/(Ps*rp[3*si]); for(let j=0;j<3;j++){const i=3*si+j; L[i]=Ls*P[i]/Ps;}}
+  const PphysTot=haveT?sum(Pphys):NaN, Ptot=Pset!=null?Pset:PphysTot;
+  const L=new Array(M), P=new Array(M);
+  if(byLoss){
+    for(let i=0;i<M;i++) P[i]=Ptot*Pphys[i]/PphysTot;
+    if(s.testWiring==='series'){const R=V*V/Ptot; for(let i=0;i<M;i++) L[i]=(R*P[i]/Ptot)/rp[i];}
+    else for(let si=0;si<N;si++){const Ps=P[3*si]+P[3*si+1]+P[3*si+2], Ls=V*V/(Ps*rp[3*si]); for(let j=0;j<3;j++){const i=3*si+j; L[i]=Ls*P[i]/Ps;}}
+  }else{ // wire length proportional to area, total set by the power
+    if(s.testWiring==='series'){
+      const c=V*V/(Ptot*sum(A.map((a,i)=>rp[i]*a))); for(let i=0;i<M;i++) L[i]=c*A[i];
+      const I=V/sum(L.map((l,i)=>l*rp[i])); for(let i=0;i<M;i++) P[i]=I*I*rp[i]*L[i];
+    }else{
+      let q=0; for(let si=0;si<N;si++) q+=1/(rp[3*si]*(A[3*si]+A[3*si+1]+A[3*si+2]));
+      const c=V*V/Ptot*q; for(let i=0;i<M;i++) L[i]=c*A[i];
+      for(let si=0;si<N;si++){const Ls=L[3*si]+L[3*si+1]+L[3*si+2], Is=V/(rp[3*si]*Ls); for(let j=0;j<3;j++){const i=3*si+j; P[i]=Is*Is*rp[i]*L[i];}}
+    }
+  }
   const sides=sd.map((x,si)=>({name:x.name||('Side '+(si+1)),L:L[3*si]+L[3*si+1]+L[3*si+2],P:P[3*si]+P[3*si+1]+P[3*si+2]}));
-  return {L,P,Ptot,I:Ptot/V,Ltot:sum(L),sides,hc:hc/At,hr:hr/At,mult};
+  return {L,P,Ptot,PphysTot,auto:Pset==null,I:Ptot/V,R:V*V/Ptot,Ltot:sum(L),sides,hc:hc/At,hr:hr/At,mult,haveT};
 }
 
 // ---------- step 1: physics estimate of the test ----------
@@ -568,15 +589,14 @@ function hSurf(TaC,TsC,L,eps){
 function estimate(s){
   const sd=s.sides||[], N=sd.length, M=3*N, Ta=+s.roomTest;
   if(!N||!(s.vTest>0)||!Number.isFinite(Ta)) return {err:true};
-  const areaSide=sd.map(x=>(+x.length)*(+x.width)), Atot=sum(areaSide), DZ=s.testDist==='design'?design(s):null;
-  if(s.testDist==='area'&&!(s.testTotalL>0)) return {err:true};
+  const areaSide=sd.map(x=>(+x.length)*(+x.width)), Atot=sum(areaSide), DZ=s.testDist!=='manual'?design(s):null;
   const segA=[],side=[],L1=[],rp=[],Lc=[];
   for(let si=0;si<N;si++){
     const x=sd[si]; if(!(+x.length>0&&+x.width>0&&+x.rp>0)) return {err:true};
     const vertical=N===4&&si%2===1;                     // right and left strips run vertically
     const Lchar=(vertical?+x.length:+x.width)/1000;      // vertical extent of the strip, m
     for(let j=0;j<3;j++){
-      const l=DZ?(DZ.L?DZ.L[3*si+j]:NaN):s.testDist==='area'?s.testTotalL*areaSide[si]/Atot/3:+(x.wire||[])[j];
+      const l=DZ?(DZ.L?DZ.L[3*si+j]:NaN):+(x.wire||[])[j];
       if(!(l>0)) return {err:true};
       segA.push(areaSide[si]/3); side.push(si); L1.push(l); rp.push(+x.rp); Lc.push(Lchar);
     }
@@ -637,7 +657,6 @@ function renderSetup(){
   CHK.forEach(id=>$(id).checked=!!S[id]);
 }
 function vis(){
-  $('testTotalRow').hidden=S.testDist!=='area';
   $('customRow').hidden=S.mode!=='custom';
   $('exTag').hidden=!isExample;
 }
@@ -747,14 +766,19 @@ function renderSteps(E,r){
   const Tm=S.sides.flatMap(x=>x.T.map(v=>parseFloat(v))), have=Tm.filter(Number.isFinite).length, M=Tm.length;
   const D=window.__design||{};
   let s1;
-  if(S.testDist==='design'){
-    s1=`<div class="step ${D.L?'done':'wait'}"><div class="n">1 · Design for ${fmt(S.target,1)} °C</div>`;
-    s1+=D.L?`<div class="t">${fmt(D.Ltot,3)} m wire · ${fmt(D.Ptot,1)} W</div><div class="d">${D.sides.map(x=>`${esc(x.name)} ${fmt(x.L*1000,0)} mm`).join(' · ')}<br>${fmt(D.I,2)} A at ${fmt(S.vTest,0)} V · h ≈ ${fmt(D.hc,1)} conv + ${fmt(D.hr,1)} rad W/m²K${D.mult!==1?' × '+fmt(D.mult,2):''}${E.T&&Math.abs(S.roomTest-S.ambNew)>0.05?` · at the ${fmt(S.roomTest,1)} °C test room expect ${fmt(E.Tmin,1)}–${fmt(E.Tmax,1)} °C`:''}</div>`
-           :`<div class="t">—</div><div class="d">${esc(D.err||'Enter the target and side sizes.')}</div>`;
+  if(S.testDist!=='manual'){
+    const EA=D.L?estimate(Object.assign({},S,{roomTest:S.ambNew})):{};
+    s1=`<div class="step ${D.L?'done':'wait'}"><div class="n">1 · Design · ${D.auto?'sized for '+fmt(S.target,1)+' °C':fmt(D.Ptot,1)+' W'}</div>`;
+    if(D.L){
+      s1+=`<div class="t">${fmt(D.Ltot,3)} m wire · ${fmt(D.Ptot,1)} W</div><div class="d">${D.sides.map(x=>`${esc(x.name)} ${fmt(x.L*1000,0)} mm`).join(' · ')}<br>${fmt(D.R,1)} Ω · ${fmt(D.I,2)} A at ${fmt(S.vTest,0)} V`;
+      if(EA.T) s1+=` · at ${fmt(S.ambNew,1)} °C ambient expect ${fmt(EA.Tmin,1)}–${fmt(EA.Tmax,1)} °C`;
+      if(!D.auto&&Number.isFinite(D.PphysTot)) s1+=` · surface physics says ${fmt(D.PphysTot,1)} W for ${fmt(S.target,1)} °C${D.mult!==1?' (× '+fmt(D.mult,2)+')':''}`;
+      s1+=`</div>`;
+    }else s1+=`<div class="t">—</div><div class="d">${esc(D.err||'Enter the heater power or target, and the side sizes.')}</div>`;
     s1+='</div>';
   }else{
   s1=`<div class="step ${E.T?'done':'wait'}"><div class="n">1 · ${S.testDist==='manual'?'Built layout':'Estimate test 1'}</div>`;
-  if(S.locked) s1+=`<div class="d"><b>Design locked as built</b> when the readings went in, so changing the target or losses no longer moves the test layout. Set Wire laid back to “From target design” to redesign.</div>`;
+  if(S.locked) s1+=`<div class="d"><b>Design locked as built</b> when the readings went in, so changing the target or losses no longer moves the test layout. Set Wire split back to a computed option to redesign.</div>`;
   s1+=E.T?`<div class="t">${fmt(E.Tmin,1)}–${fmt(E.Tmax,1)} °C</div><div class="d">${fmt(E.P1tot,1)} W · ${fmt(E.P1tot/S.vTest,2)} A at ${fmt(S.vTest,0)} V · ${fmt(S.roomTest,1)} °C room · h ≈ ${fmt(E.hcAvg,1)} conv + ${fmt(E.hrAvg,1)} rad W/m²K${E.mult!==1?' × '+fmt(E.mult,2):''}</div>`
          :`<div class="t">—</div><div class="d">Enter side sizes, wire and test supply.</div>`;
   s1+='</div>';
@@ -765,7 +789,7 @@ function renderSteps(E,r){
     const rms=Math.sqrt(sum(Tm.map((t,i)=>(t-E.T[i]-bias)**2))/M);
     const fac=(sum(de)/sum(dm))*E.mult;
     s2+=`<div class="d">Measured ${bias>=0?'+':''}${fmt(bias,1)} K vs estimate (scatter ±${fmt(rms,1)} K). ${Math.abs(fac-E.mult)>0.15?`Matching it needs extra loss factor ≈ ×${fmt(fac,1)}.`:'Estimate matches.'}</div>`;
-  }else s2+=`<div class="d">${have?'Enter the remaining readings.':'Build the step 1 layout, run it at full power and enter T1–T3 per side. The design locks as built when you enter the first reading.'}</div>`;
+  }else s2+=`<div class="d">${have?'Enter the remaining readings.':'Build the step 1 layout, run it at full power and enter T1–T3 per side. The layout locks as built when you enter the first reading.'}</div>`;
   s2+='</div>';
   let s3=`<div class="step ${r&&r.segs?'done':'wait'}"><div class="n">3 · Adjusted layout</div>`;
   if(r&&r.segs){
@@ -850,7 +874,7 @@ function update(){
 function markEdited(){isExample=false;}
 // Once readings go in, the built layout must stop following the design inputs.
 function lockDesign(){
-  if(S.testDist!=='design') return false;
+  if(S.testDist==='manual') return false;
   const D=design(S); if(!D.L) return false;
   S.sides.forEach((x,i)=>{x.wire=[0,1,2].map(j=>+D.L[3*i+j].toFixed(4));});
   S.testDist='manual'; S.locked=true; renderSetup(); return true;
