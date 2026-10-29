@@ -8,11 +8,11 @@ It runs entirely in the browser. There is no install, no server and no data uplo
 
 ## Workflow
 
-1. **Estimate test 1.** Before you build anything, the app estimates every probe temperature from physics: natural convection on a vertical surface (Churchill–Chu), radiation with your surface emissivity, front face only or both faces, plus heat sharing through the plate. An extra loss factor covers mounts and attached panels.
-2. **Measure actual.** Run the test at full power and enter T1–T3 per side. The estimate is shown under each reading, and the step card reports the average difference and the extra loss factor that would make the estimate match.
-3. **Adjust.** The new layout is tuned on the measured readings.
+1. **Design for the target.** Enter the target surface temperature and the operating ambient. Each section gets the power its surface loses at the target: natural convection on a vertical surface (Churchill–Chu) plus radiation at your emissivity, front face only or both faces, times an extra loss factor for mounts and attached panels. At a uniform temperature no heat flows between sections, so this power holds them all at the target. The wire length per side and per section then follows from the supply voltage, wiring and wire Ω/m.
+2. **Measure actual.** Build that layout, run it at full power and enter T1–T3 per side. The design locks as built at the first reading, so later changes to the target or losses don't move the test layout. The estimate is shown under each reading, and the step card reports the extra loss factor that would make the estimate match. Use that factor for your next design.
+3. **Adjusted layout.** Each section's real heat loss is calibrated from the readings, including heat shared through the plate. The wire per section is then recalculated to hold the target. If the readings match the estimate, the adjusted layout is the same as the design.
 
-**Fill readings with estimate** lets you design a first layout from the estimate alone, before any test. **Clear readings** empties the probe inputs for a new test.
+**Fill readings with estimate** shows what the adjusted step would do with perfect readings. **Clear readings** empties the probe inputs for a new test.
 
 ## Inputs
 
