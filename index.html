@@ -267,7 +267,7 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
             <thead><tr>
               <th>Zone / section</th><th>Probe at<br><span class="unit">mm</span></th><th>Measured<br><span class="unit">°C</span></th><th>Estimated<br><span class="unit">°C</span></th>
               <th>Test power<br><span class="unit">W</span></th><th>Heat loss<br><span class="unit">W/K</span></th><th>New power<br><span class="unit">W</span></th>
-              <th>New wire<br><span class="unit">mm</span></th><th>Change<br><span class="unit">mm</span></th><th>Wire load<br><span class="unit">W/m</span></th>
+              <th>New wire<br><span class="unit">mm</span></th><th>Change<br><span class="unit">mm</span></th><th>Wire load<br><span class="unit">W/m</span></th><th>Current<br><span class="unit">A</span></th>
               <th>Pitch<br><span class="unit">mm</span></th><th>Predicted<br><span class="unit">°C</span></th><th>Wire est.<br><span class="unit">°C</span></th>
             </tr></thead>
             <tbody></tbody>
@@ -709,13 +709,18 @@ function drawScale(){
   svg.innerHTML=g;
 }
 
+function sideCurrents(r,x){
+  const I1=S.testWiring==='series'?r.P1tot/S.vTest:x.P1/S.vTest;
+  const I2=S.newWiring==='series'?r.Ptot/S.vNew:x.P2/S.vNew;
+  return {I1,I2};
+}
 function renderEst(E){
   S.sides.forEach((x,i)=>{for(let j=0;j<3;j++){const el=$(`e${i}_${j}`); if(el) el.textContent=E.T?'est '+fmt(E.T[3*i+j],1):'est —';}});
 }
 function renderSteps(E,r){
   const Tm=S.sides.flatMap(x=>x.T.map(v=>parseFloat(v))), have=Tm.filter(Number.isFinite).length, M=Tm.length;
   let s1=`<div class="step ${E.T?'done':'wait'}"><div class="n">1 · Estimate test 1</div>`;
-  s1+=E.T?`<div class="t">${fmt(E.Tmin,1)}–${fmt(E.Tmax,1)} °C</div><div class="d">${fmt(E.P1tot,1)} W at ${fmt(S.roomTest,1)} °C room · h ≈ ${fmt(E.hcAvg,1)} conv + ${fmt(E.hrAvg,1)} rad W/m²K${E.mult!==1?' × '+fmt(E.mult,2):''}</div>`
+  s1+=E.T?`<div class="t">${fmt(E.Tmin,1)}–${fmt(E.Tmax,1)} °C</div><div class="d">${fmt(E.P1tot,1)} W · ${fmt(E.P1tot/S.vTest,2)} A at ${fmt(S.vTest,0)} V · ${fmt(S.roomTest,1)} °C room · h ≈ ${fmt(E.hcAvg,1)} conv + ${fmt(E.hrAvg,1)} rad W/m²K${E.mult!==1?' × '+fmt(E.mult,2):''}</div>`
          :`<div class="t">—</div><div class="d">Enter side sizes, wire and test supply.</div>`;
   s1+='</div>';
   let s2=`<div class="step ${have===M?'done':'wait'}"><div class="n">2 · Measure actual</div><div class="t">${have} of ${M} probes</div>`;
@@ -727,7 +732,7 @@ function renderSteps(E,r){
   }else s2+=`<div class="d">${have?'Enter the remaining readings.':'Run test 1 at full power and enter T1–T3 per side.'}</div>`;
   s2+='</div>';
   let s3=`<div class="step ${r&&r.segs?'done':'wait'}"><div class="n">3 · Adjust layout</div>`;
-  s3+=r&&r.segs?`<div class="t">${fmt(r.T2min,1)}–${fmt(r.T2max,1)} °C</div><div class="d">${fmt(r.Ptot,1)} W · ${fmt(r.L2tot,3)} m wire · spread ${fmt(r.spread2,2)} K</div>`
+  s3+=r&&r.segs?`<div class="t">${fmt(r.T2min,1)}–${fmt(r.T2max,1)} °C</div><div class="d">${fmt(r.Ptot,1)} W · ${fmt(r.I2,2)} A · ${fmt(r.L2tot,3)} m wire · spread ${fmt(r.spread2,2)} K</div>`
               :`<div class="t">—</div><div class="d">Waiting for the measured readings.</div>`;
   s3+='</div>';
   $('steps').innerHTML=s1+s2+s3;
@@ -756,7 +761,8 @@ function update(){
   $('tiles').innerHTML=[
     ['Total power',`${fmt(r.Ptot,1)} W`,`test ${fmt(r.P1tot,1)} W`],
     ['Total wire',`${fmt(r.L2tot,3)} m`,`test ${fmt(r.L1tot,3)} m`],
-    [S.newWiring==='series'?'Resistance / current':'Combined R / current',`${fmt(r.Rtot2,1)} Ω`,`${fmt(r.I2,2)} A${S.newWiring==='series'?'':' total'} at ${fmt(S.vNew,0)} V`],
+    [S.newWiring==='series'?'Resistance':'Combined resistance',`${fmt(r.Rtot2,1)} Ω`,`test ${fmt(S.vTest*S.vTest/r.P1tot,1)} Ω`],
+    ['Supply current',`${fmt(r.I2,2)} A`,`at ${fmt(S.vNew,0)} V · test ${fmt(r.P1tot/S.vTest,2)} A at ${fmt(S.vTest,0)} V`],
     ['Predicted SS',`<span class="${prCls}">${fmt(r.T2min,1)}–${fmt(r.T2max,1)} °C</span>`,bandOK()?`spec ${fmt(S.bandMin,1)}–${fmt(S.bandMax,1)} °C at ${fmt(S.ambNew,1)} °C ambient`:`at ${fmt(S.ambNew,1)} °C ambient`],
     ['Probe spread',`${fmt(r.spread2,2)} K`,`test ${fmt(r.spread1,1)} K over ${r.segs.length} probes`]
   ].map(t=>`<div class="tile"><div class="k">${t[0]}</div><div class="v">${t[1]}</div><div class="d">${t[2]}</div></div>`).join('');
@@ -769,12 +775,12 @@ function update(){
     const wFlag=x.Twmax>180?`<small class="c-hot">over 180 °C</small>`:(x.Twmax>150?`<small class="c-warn">near limit</small>`:'');
     rows+=`<tr class="side-row"><td><span class="sidecell"><span class="sw" style="background:${esc(x.color)}"></span>${esc(x.name)}</span></td>
       <td>${fmt(x.length,0)}<small>length</small></td><td>${fmt(x.T1avg,1)}<small>avg</small></td><td>${E.T?fmt((E.T[3*si]+E.T[3*si+1]+E.T[3*si+2])/3,1):'—'}<small>avg</small></td><td>${fmt(x.P1,2)}</td><td>${fmt(x.G,3)}</td><td>${fmt(x.P2,2)}</td>
-      <td><b>${fmt(x.L2*1000,0)}</b></td><td>${chg(x.L1,x.L2)}</td><td>${fmt(x.q,1)}${qFlag}</td><td>—</td>
+      <td><b>${fmt(x.L2*1000,0)}</b></td><td>${chg(x.L1,x.L2)}</td><td>${fmt(x.q,1)}${qFlag}</td><td>${fmt(sideCurrents(r,x).I2,2)}<small>test ${fmt(sideCurrents(r,x).I1,2)}</small></td><td>—</td>
       <td class="${tClass(x.T2min)}">${fmt(x.T2min,1)}–${fmt(x.T2max,1)}</td><td>${fmt(x.Twmax,0)}${wFlag}</td></tr>`;
     r.segs.slice(3*si,3*si+3).forEach(sg=>{
       const pFlag=sg.pitch<minPitch?`<small class="c-hot">tighter than 2×OD</small>`:'';
       rows+=`<tr class="seg-row"><td>Section ${sg.j+1}</td><td>${fmt(sg.pos,0)}</td><td>${fmt(sg.T1,1)}</td><td>${E.T?fmt(E.T[sg.i],1)+`<small>${(sg.T1-E.T[sg.i]>=0?'+':'')+fmt(sg.T1-E.T[sg.i],1)} K meas.</small>`:'—'}</td><td>${fmt(sg.P1,2)}</td><td>${fmt(sg.G,3)}</td>
-        <td>${fmt(sg.P2,2)}</td><td>${fmt(sg.L2*1000,0)}</td><td>${chg(sg.L1,sg.L2)}</td><td></td><td>${fmt(sg.pitch,1)}${pFlag}</td>
+        <td>${fmt(sg.P2,2)}</td><td>${fmt(sg.L2*1000,0)}</td><td>${chg(sg.L1,sg.L2)}</td><td></td><td></td><td>${fmt(sg.pitch,1)}${pFlag}</td>
         <td class="${tClass(sg.T2)}">${fmt(sg.T2,1)}<small>${tLabel(sg.T2)}</small></td><td>${fmt(sg.Tw,0)}</td></tr>`;
     });
   });
@@ -836,11 +842,11 @@ $('copy').addEventListener('click',()=>{
   const r=window.__last, b=$('copy'), E=window.__est||{};
   const reset=()=>setTimeout(()=>b.textContent='Copy results for Sheets',1600);
   if(!r||!r.segs){b.textContent='Fix the inputs first'; reset(); return;}
-  const head=['Side','Section','Probe at (mm)','Area (mm2)','Wire (ohm/m)','Test wire (m)','Measured SS (C)','Estimated test SS (C)','Test power (W)','Heat loss (W/K)','New power (W)','New wire (mm)','Change (mm)','Wire load (W/m)','Pitch (mm)','Predicted SS (C)','Wire est (C)'];
+  const head=['Side','Section','Probe at (mm)','Area (mm2)','Wire (ohm/m)','Test wire (m)','Measured SS (C)','Estimated test SS (C)','Test power (W)','Heat loss (W/K)','New power (W)','New wire (mm)','Change (mm)','Wire load (W/m)','Pitch (mm)','Predicted SS (C)','Wire est (C)','Test current (A)','New current (A)'];
   const lines=[head.join('\t')];
   r.sides.forEach((x,si)=>{
-    r.segs.slice(3*si,3*si+3).forEach(sg=>lines.push([x.name,sg.j+1,sg.pos.toFixed(0),sg.area.toFixed(0),S.sides[si].rp,sg.L1.toFixed(3),sg.T1,E.T?E.T[sg.i].toFixed(2):'',sg.P1.toFixed(2),sg.G.toFixed(4),sg.P2.toFixed(2),(sg.L2*1000).toFixed(0),((sg.L2-sg.L1)*1000).toFixed(0),x.q.toFixed(2),sg.pitch.toFixed(1),sg.T2.toFixed(2),sg.Tw.toFixed(0)].join('\t')));
-    lines.push([x.name+' total','','',(x.length*x.width).toFixed(0),S.sides[si].rp,x.L1.toFixed(3),x.T1avg.toFixed(2),E.T?((E.T[3*si]+E.T[3*si+1]+E.T[3*si+2])/3).toFixed(2):'',x.P1.toFixed(2),x.G.toFixed(4),x.P2.toFixed(2),(x.L2*1000).toFixed(0),((x.L2-x.L1)*1000).toFixed(0),x.q.toFixed(2),'',x.T2min.toFixed(2)+'-'+x.T2max.toFixed(2),x.Twmax.toFixed(0)].join('\t'));
+    r.segs.slice(3*si,3*si+3).forEach(sg=>lines.push([x.name,sg.j+1,sg.pos.toFixed(0),sg.area.toFixed(0),S.sides[si].rp,sg.L1.toFixed(3),sg.T1,E.T?E.T[sg.i].toFixed(2):'',sg.P1.toFixed(2),sg.G.toFixed(4),sg.P2.toFixed(2),(sg.L2*1000).toFixed(0),((sg.L2-sg.L1)*1000).toFixed(0),x.q.toFixed(2),sg.pitch.toFixed(1),sg.T2.toFixed(2),sg.Tw.toFixed(0),sideCurrents(r,x).I1.toFixed(3),sideCurrents(r,x).I2.toFixed(3)].join('\t')));
+    lines.push([x.name+' total','','',(x.length*x.width).toFixed(0),S.sides[si].rp,x.L1.toFixed(3),x.T1avg.toFixed(2),E.T?((E.T[3*si]+E.T[3*si+1]+E.T[3*si+2])/3).toFixed(2):'',x.P1.toFixed(2),x.G.toFixed(4),x.P2.toFixed(2),(x.L2*1000).toFixed(0),((x.L2-x.L1)*1000).toFixed(0),x.q.toFixed(2),'',x.T2min.toFixed(2)+'-'+x.T2max.toFixed(2),x.Twmax.toFixed(0),sideCurrents(r,x).I1.toFixed(3),sideCurrents(r,x).I2.toFixed(3)].join('\t'));
   });
   lines.push(['Total','','',sum(r.sides.map(x=>x.length*x.width)).toFixed(0),'',r.L1tot.toFixed(3),'','',r.P1tot.toFixed(2),r.Gtot.toFixed(4),r.Ptot.toFixed(2),(r.L2tot*1000).toFixed(0),((r.L2tot-r.L1tot)*1000).toFixed(0)].join('\t'));
   const txt=lines.join('\n');
