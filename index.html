@@ -128,6 +128,8 @@ figcaption span{font-weight:400;color:var(--muted);font-family:var(--f-mono);fon
 .step .d{font-size:.82rem;color:var(--muted)}
 .step.done{border-color:var(--ok)} .step.done .n{color:var(--ok)}
 .step.wait{opacity:.85}
+.step .fix{line-height:1.45}
+.step .fix button{padding:3px 9px;font-size:.8rem;margin:6px 6px 0 0}
 #zones small.est{display:block;text-align:right;font-family:var(--f-mono);font-size:.72rem;color:var(--muted);padding:2px 2px 0}
 figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
 .cap-l{display:flex;align-items:center;gap:6px}
@@ -783,6 +785,23 @@ function renderSteps(E,r){
          :`<div class="t">—</div><div class="d">Enter side sizes, wire and test supply.</div>`;
   s1+='</div>';
   }
+  // Does the layout that is (or will be) built actually reach the target?
+  const EA=estimate(Object.assign({},S,{roomTest:S.ambNew}));
+  if(EA.T&&Number.isFinite(+S.target)&&Number.isFinite(+S.ambNew)&&S.target>S.ambNew){
+    const mean=sum(EA.T)/EA.T.length, off=mean-S.target, spread=EA.Tmax-EA.Tmin;
+    const outBand=bandOK()&&(EA.Tmax>S.bandMax||EA.Tmin<S.bandMin);
+    let w='';
+    if(Math.abs(off)>0.5||outBand){
+      const Dt=design(Object.assign({},S,{designP:NaN,testDist:'design'}));
+      const mult=(+S.lossMult>0)?+S.lossMult:1, fac=Dt.PphysTot>0?mult*EA.P1tot/Dt.PphysTot:NaN;
+      w+=`<b>Off target.</b> At ${fmt(EA.P1tot,1)} W the physics expects ${fmt(EA.Tmin,1)}–${fmt(EA.Tmax,1)} °C at ${fmt(S.ambNew,1)} °C ambient, ${fmt(Math.abs(off),1)} K ${off>0?'above':'below'} the ${fmt(S.target,1)} °C target.`;
+      if(Dt.PphysTot>0) w+=`<br><button type="button" data-act="sizeP" data-p="${Dt.PphysTot.toFixed(1)}">Use ${fmt(Dt.PphysTot,1)} W for ${fmt(S.target,1)} °C</button>`;
+      if(Number.isFinite(fac)) w+=`<button type="button" data-act="fitLoss" data-f="${fac.toFixed(2)}">Keep ${fmt(EA.P1tot,1)} W: losses are ×${fmt(fac,2)}</button>`;
+      w+=`<br>Pick the first if you trust the surface physics. Pick the second if you know the frame loses more heat (mounts, attached panel); your first test will tell you which.`;
+    }
+    if(spread>1.5&&S.testDist!=='design') w+=`${w?'<br>':''}<b>Uneven split.</b> This layout runs ${fmt(spread,1)} K hotter on some sides. <button type="button" data-act="byLoss">Split by zone heat loss</button>`;
+    if(w) s1=s1.replace(/<\/div>$/,`<div class="d c-warn fix">${w}</div></div>`);
+  }
   let s2=`<div class="step ${have===M?'done':'wait'}"><div class="n">2 · Measure actual</div><div class="t">${have} of ${M} probes</div>`;
   if(E.T&&have===M){
     const dm=Tm.map((t,i)=>t-S.roomTest), de=E.dT, bias=sum(Tm.map((t,i)=>t-E.T[i]))/M;
@@ -792,6 +811,7 @@ function renderSteps(E,r){
   }else s2+=`<div class="d">${have?'Enter the remaining readings.':'Build the step 1 layout, run it at full power and enter T1–T3 per side. The layout locks as built when you enter the first reading.'}</div>`;
   s2+='</div>';
   let s3=`<div class="step ${r&&r.segs?'done':'wait'}"><div class="n">3 · Adjusted layout</div>`;
+  if(S.mode!=='target') s3+=`<div class="d c-warn fix"><b>Not aiming at the target:</b> total power is set to “${S.mode==='same'?'Same as test':'Custom watts'}”. <button type="button" data-act="modeTarget">Hit ${fmt(S.target,1)} °C</button></div>`;
   if(r&&r.segs){
     const maxRel=Math.max(...r.segs.map(g=>Math.abs(g.L2-g.L1)/g.L1));
     const wiringChanged=S.newWiring!==S.testWiring||Math.abs(S.vNew-S.vTest)>1e-9;
@@ -879,8 +899,13 @@ function lockDesign(){
   S.sides.forEach((x,i)=>{x.wire=[0,1,2].map(j=>+D.L[3*i+j].toFixed(4));});
   S.testDist='manual'; S.locked=true; renderSetup(); return true;
 }
-NUM.forEach(id=>$(id).addEventListener('input',e=>{S[id]=parseFloat(e.target.value); markEdited(); save(); update();}));
+// the adjusted layout follows the test supply and wiring unless you set it differently
+NUM.forEach(id=>$(id).addEventListener('input',e=>{
+  const v=parseFloat(e.target.value);
+  if(id==='vTest'&&S.vNew===S.vTest){S.vNew=v; $('vNew').value=Number.isFinite(v)?v:'';}
+  S[id]=v; markEdited(); save(); update();}));
 SEL.forEach(id=>$(id).addEventListener('change',e=>{
+  if(id==='testWiring'&&S.newWiring===S.testWiring){S.newWiring=e.target.value; $('newWiring').value=e.target.value;}
   if(id==='testDist'&&e.target.value==='manual'){const r=calc(S); const sg=r.segs||estimate(S).segs; if(sg) S.sides.forEach((x,i)=>{x.wire=[0,1,2].map(j=>+sg[3*i+j].L1.toFixed(3));});}
   S[id]=e.target.value; if(id==='testDist') S.locked=false; markEdited(); save(); update();}));
 CHK.forEach(id=>$(id).addEventListener('change',e=>{S[id]=e.target.checked; save(); update();}));
@@ -903,6 +928,17 @@ $('delSide').addEventListener('click',()=>{
   const last=S.sides[S.sides.length-1], nm=last.name||('Side '+S.sides.length);
   if(!delSideArmed){delSideArmed=true; $('delSide').textContent=`Confirm delete ${nm}`; return;}
   S.sides.pop(); markEdited(); save(); renderZones(); update();
+});
+$('steps').addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]'); if(!b) return;
+  const act=b.dataset.act, hadReadings=S.sides.some(x=>x.T.some(v=>Number.isFinite(parseFloat(v))));
+  const redesign=()=>{S.testDist='design'; S.locked=false; if(hadReadings) S.sides.forEach(x=>{x.T=[NaN,NaN,NaN];});};
+  if(act==='sizeP'){S.designP=parseFloat(b.dataset.p); redesign();}
+  else if(act==='fitLoss'){S.lossMult=parseFloat(b.dataset.f); if(S.testDist==='manual'&&!S.locked){} }
+  else if(act==='byLoss'){redesign();}
+  else if(act==='modeTarget'){S.mode='target';}
+  markEdited(); save(); renderSetup(); renderZones(); update();
+  if((act==='sizeP'||act==='byLoss')&&hadReadings){$('nextMsg').textContent='Layout redesigned, so the old readings were cleared. Build the new layout and enter its readings.'; $('nextMsg').className='note ok-t';}
 });
 $('fillEst').addEventListener('click',()=>{
   const E=window.__est; if(!E||!E.T) return;
