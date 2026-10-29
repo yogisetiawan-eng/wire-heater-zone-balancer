@@ -209,9 +209,6 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
           <select id="newWiring"><option value="series">One series string</option><option value="parallel">One string per side</option></select></label>
         <label class="f"><span>Pitch along each side</span>
           <select id="pitchMode"><option value="graded">Graded (3 sections)</option><option value="uniform">Uniform</option></select></label>
-        <label class="f"><span>Total power</span>
-          <select id="mode"><option value="target">Hit target temp</option><option value="same">Same as test</option><option value="custom">Custom watts</option></select></label>
-        <label class="f" id="customRow"><span>Custom total<small>W</small></span><input id="customP" type="number" step="0.5"></label>
       </fieldset>
       <fieldset>
         <details>
@@ -289,7 +286,7 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
 
       <section class="method">
         <h2>How it calculates</h2>
-        <p><b>Workflow.</b> 1 · Design: the heater power is calculated from the target, as the sum of each section's surface loss at the target (convection + radiation × extra loss factor; at a uniform temperature no heat flows between sections). The total wire follows from that power (series <code>R = V²/P</code>, <code>L = R / Ω/m</code>) and is shared between sections by their heat loss, or evenly by area. 2 · Build that layout, run it at full power and enter the measured probes; the design locks as built at the first reading. 3 · Adjusted layout: each section's real heat loss is calibrated from the readings and the wire is recalculated to hold the target. If the readings match the estimate, the adjusted layout equals the design.</p>
+        <p><b>Workflow.</b> 1 · Design: the heater power is calculated from the target, as the sum of each section's surface loss at the target (convection + radiation × extra loss factor; at a uniform temperature no heat flows between sections). The total wire follows from that power (series <code>R = V²/P</code>, <code>L = R / Ω/m</code>) and is shared between sections by their heat loss, or evenly by area. 2 · Build that layout, run it at full power and enter the measured probes. 3 · Adjusted layout: each section's real heat loss is calibrated from the readings and the wire is recalculated to hold the target. If the readings match the estimate, the adjusted layout equals the design.</p>
         <p><b>Estimate.</b> Each section loses heat by natural convection on a vertical surface (Churchill–Chu, with the strip's vertical extent as the length: width for top and bottom, length for left and right) plus radiation <code>ε·σ·(Ts²+Ta²)(Ts+Ta)</code>, from the front face or both faces, times the extra loss factor. Sections share heat through the plate as below. Mounts and attached panels usually drain much more heat than the surface alone: step 2 shows the factor that would make the estimate match your readings, so you can use it for the next design.</p>
         <p><b>Sections.</b> Each side is split into three equal sections, one per probe, so a frame of four sides becomes twelve sections. Test power per section follows from the wiring: in one series string every section carries <code>I = V / ΣRᵢ</code>, so <code>Pᵢ = I²·Ω/m·Lᵢ</code>; with one string per side the current is <code>V / (Ω/m·L_side)</code>.</p>
         <p><b>Heat sharing.</b> Neighbouring sections exchange heat through the plate: <code>Kᵢⱼ = k·t·width / spacing</code>, summed over the front and backing plates, with corner links when the sides form a closed frame. Each section's own loss to the room is then <code>Gᵢ = (Pᵢ − Σ Kᵢⱼ·(Tᵢ − Tⱼ)) / (Tᵢ − T_room)</code>. This takes out the heat a section only passes along to its neighbours, which the simple one-probe method could not.</p>
@@ -317,8 +314,8 @@ const EXAMPLE={
     {name:'Left',   color:'#111111', length:475, width:70, rp:15, wire:[0.772,0.772,0.772], T:[27.6,28.1,29.2]}
   ]
 };
-const NUM=['vTest','roomTest','t1','k1','t2','k2','vNew','ambNew','target','customP','bandMin','bandMax','n','rth','od','eps','lossMult'];
-const SEL=['testWiring','testDist','ring','newWiring','pitchMode','mode','faces','leftMap'];
+const NUM=['vTest','roomTest','t1','k1','t2','k2','vNew','ambNew','target','bandMin','bandMax','n','rth','od','eps','lossMult'];
+const SEL=['testWiring','testDist','ring','newWiring','pitchMode','faces','leftMap'];
 const CHK=['showWire','showProbes'];
 const clone=o=>JSON.parse(JSON.stringify(o));
 const $=id=>document.getElementById(id);
@@ -343,7 +340,8 @@ function migrate(st){
       length:a>0?Math.round(a/w):NaN,width:w,rp:parseFloat(x.rp),wire:[l/3,l/3,l/3],T:[t,t,t]};
   });
   if(sides.some(x=>x&&!Array.isArray(x.T)) && st.testDist==null) out.testDist='manual';
-  if(st.designP===undefined && st.testDist==='design') out.designP=NaN;
+  if(st.locked===true && out.testDist==='manual') out.testDist='design';
+  out.locked=false; out.mode='target';
   if(out.testDist==='area' && !(parseFloat(st.designP)>0) && parseFloat(st.testTotalL)>0 && out.sides.length){
     const rpm=out.sides.reduce((a,x)=>a+(+x.rp||0),0)/out.sides.length;
     if(rpm>0 && +out.vTest>0) out.designP=+((+out.vTest)**2/(rpm*parseFloat(st.testTotalL))).toFixed(2);
@@ -662,7 +660,6 @@ function renderSetup(){
   CHK.forEach(id=>$(id).checked=!!S[id]);
 }
 function vis(){
-  $('customRow').hidden=S.mode!=='custom';
   $('exTag').hidden=!isExample;
 }
 
@@ -783,7 +780,6 @@ function renderSteps(E,r){
     s1+='</div>';
   }else{
   s1=`<div class="step ${E.T?'done':'wait'}"><div class="n">1 · ${S.testDist==='manual'?'Built layout':'Estimate test 1'}</div>`;
-  if(S.locked) s1+=`<div class="d"><b>Design locked as built</b> when the readings went in, so changing the target or losses no longer moves the test layout. Set Wire split back to a computed option to redesign.</div>`;
   s1+=E.T?`<div class="t">${fmt(E.Tmin,1)}–${fmt(E.Tmax,1)} °C</div><div class="d">${fmt(E.P1tot,1)} W · ${fmt(E.P1tot/S.vTest,2)} A at ${fmt(S.vTest,0)} V · ${fmt(S.roomTest,1)} °C room · h ≈ ${fmt(E.hcAvg,1)} conv + ${fmt(E.hrAvg,1)} rad W/m²K${E.mult!==1?' × '+fmt(E.mult,2):''}</div>`
          :`<div class="t">—</div><div class="d">Enter side sizes, wire and test supply.</div>`;
   s1+='</div>';
@@ -808,10 +804,9 @@ function renderSteps(E,r){
     const rms=Math.sqrt(sum(Tm.map((t,i)=>(t-E.T[i]-bias)**2))/M);
     const fac=(sum(de)/sum(dm))*E.mult;
     s2+=`<div class="d">Measured ${bias>=0?'+':''}${fmt(bias,1)} K vs estimate (scatter ±${fmt(rms,1)} K). ${Math.abs(fac-E.mult)>0.15?`Matching it needs extra loss factor ≈ ×${fmt(fac,1)}.`:'Estimate matches.'}</div>`;
-  }else s2+=`<div class="d">${have?'Enter the remaining readings.':'Build the step 1 layout, run it at full power and enter T1–T3 per side. The layout locks as built when you enter the first reading.'}</div>`;
+  }else s2+=`<div class="d">${have?'Enter the remaining readings.':'Build the step 1 layout, run it at full power and enter T1–T3 per side.'}</div>`;
   s2+='</div>';
   let s3=`<div class="step ${r&&r.segs?'done':'wait'}"><div class="n">3 · Adjusted layout</div>`;
-  if(S.mode!=='target') s3+=`<div class="d c-warn fix"><b>Not aiming at the target:</b> total power is set to “${S.mode==='same'?'Same as test':'Custom watts'}”. <button type="button" data-act="modeTarget">Hit ${fmt(S.target,1)} °C</button></div>`;
   if(r&&r.segs){
     const maxRel=Math.max(...r.segs.map(g=>Math.abs(g.L2-g.L1)/g.L1));
     const wiringChanged=S.newWiring!==S.testWiring||Math.abs(S.vNew-S.vTest)>1e-9;
@@ -912,7 +907,6 @@ SEL.forEach(id=>$(id).addEventListener('change',e=>{
 CHK.forEach(id=>$(id).addEventListener('change',e=>{S[id]=e.target.checked; save(); update();}));
 $('zones').addEventListener('input',e=>{
   const el=e.target, i=+el.dataset.i, f=el.dataset.f; if(!f) return;
-  if(f==='T') lockDesign();
   if(f==='wire') S.locked=false;
   if(f==='wire'||f==='T') S.sides[i][f][+el.dataset.j]=parseFloat(el.value);
   else S.sides[i][f]=(f==='name'||f==='color')?el.value:parseFloat(el.value);
@@ -943,7 +937,6 @@ $('steps').addEventListener('click',e=>{
 });
 $('fillEst').addEventListener('click',()=>{
   const E=window.__est; if(!E||!E.T) return;
-  lockDesign();
   S.sides.forEach((x,i)=>{x.T=[0,1,2].map(j=>+E.T[3*i+j].toFixed(1));}); markEdited(); save(); renderZones(); update();
 });
 $('clearT').addEventListener('click',()=>{S.sides.forEach(x=>{x.T=[NaN,NaN,NaN];}); markEdited(); save(); renderZones(); update();});
