@@ -204,9 +204,7 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
       </fieldset>
       <fieldset>
         <legend>3 · Adjusted layout</legend>
-        <label class="f"><span>Supply voltage<small>V</small></span><input id="vNew" type="number" step="0.1"></label>
-        <label class="f"><span>Wiring</span>
-          <select id="newWiring"><option value="series">One series string</option><option value="parallel">One string per side</option></select></label>
+        <p class="note">Same supply voltage and wiring as the build.</p>
         <label class="f"><span>Pitch along each side</span>
           <select id="pitchMode"><option value="graded">Graded (3 sections)</option><option value="uniform">Uniform</option></select></label>
       </fieldset>
@@ -314,8 +312,8 @@ const EXAMPLE={
     {name:'Left',   color:'#111111', length:475, width:70, rp:15, wire:[0.772,0.772,0.772], T:[27.6,28.1,29.2]}
   ]
 };
-const NUM=['vTest','roomTest','t1','k1','t2','k2','vNew','ambNew','target','bandMin','bandMax','n','rth','od','eps','lossMult'];
-const SEL=['testWiring','testDist','ring','newWiring','pitchMode','faces','leftMap'];
+const NUM=['vTest','roomTest','t1','k1','t2','k2','ambNew','target','bandMin','bandMax','n','rth','od','eps','lossMult'];
+const SEL=['testWiring','testDist','ring','pitchMode','faces','leftMap'];
 const CHK=['showWire','showProbes'];
 const clone=o=>JSON.parse(JSON.stringify(o));
 const $=id=>document.getElementById(id);
@@ -341,7 +339,11 @@ function migrate(st){
   });
   if(sides.some(x=>x&&!Array.isArray(x.T)) && st.testDist==null) out.testDist='manual';
   if(st.locked===true && out.testDist==='manual') out.testDist='design';
-  out.locked=false; out.mode='target';
+  if(out.testDist==='manual' && !st.nextRound){
+    out.testDist='design';
+    out.sides.forEach(x=>{x.T=[NaN,NaN,NaN];});   // those readings belonged to a different layout
+  }
+  out.locked=false; out.mode='target'; out.vNew=out.vTest; out.newWiring=out.testWiring;
   if(out.testDist==='area' && !(parseFloat(st.designP)>0) && parseFloat(st.testTotalL)>0 && out.sides.length){
     const rpm=out.sides.reduce((a,x)=>a+(+x.rp||0),0)/out.sides.length;
     if(rpm>0 && +out.vTest>0) out.designP=+((+out.vTest)**2/(rpm*parseFloat(st.testTotalL))).toFixed(2);
@@ -779,7 +781,8 @@ function renderSteps(E,r){
     }else s1+=`<div class="t">—</div><div class="d">${esc(D.err||'Enter the heater power or target, and the side sizes.')}</div>`;
     s1+='</div>';
   }else{
-  s1=`<div class="step ${E.T?'done':'wait'}"><div class="n">1 · ${S.testDist==='manual'?'Built layout':'Estimate test 1'}</div>`;
+  s1=`<div class="step ${E.T?'done':'wait'}"><div class="n">1 · ${S.testDist==='manual'?'Test layout: entered lengths':'Estimate test 1'}</div>`;
+  if(S.testDist==='manual') s1+=`<div class="d fix">The wire per section is what you entered${S.nextRound?' from the last adjustment':''}, not the target design. <button type="button" data-act="toDesign">Use the target design</button></div>`;
   s1+=E.T?`<div class="t">${fmt(E.Tmin,1)}–${fmt(E.Tmax,1)} °C</div><div class="d">${fmt(E.P1tot,1)} W · ${fmt(E.P1tot/S.vTest,2)} A at ${fmt(S.vTest,0)} V · ${fmt(S.roomTest,1)} °C room · h ≈ ${fmt(E.hcAvg,1)} conv + ${fmt(E.hrAvg,1)} rad W/m²K${E.mult!==1?' × '+fmt(E.mult,2):''}</div>`
          :`<div class="t">—</div><div class="d">Enter side sizes, wire and test supply.</div>`;
   s1+='</div>';
@@ -822,6 +825,7 @@ function renderSteps(E,r){
 }
 function update(){
   vis();
+  S.vNew=S.vTest; S.newWiring=S.testWiring;   // one supply and wiring for build and adjustment
   window.__design=design(S);
   {const D=window.__design; $('designPout').textContent=D.L?`${fmt(D.Ptot,1)} W · ${fmt(D.I,2)} A`:'—';}
   const E=estimate(S); window.__est=E;
@@ -898,12 +902,10 @@ function lockDesign(){
 // the adjusted layout follows the test supply and wiring unless you set it differently
 NUM.forEach(id=>$(id).addEventListener('input',e=>{
   const v=parseFloat(e.target.value);
-  if(id==='vTest'&&S.vNew===S.vTest){S.vNew=v; $('vNew').value=Number.isFinite(v)?v:'';}
   S[id]=v; markEdited(); save(); update();}));
 SEL.forEach(id=>$(id).addEventListener('change',e=>{
-  if(id==='testWiring'&&S.newWiring===S.testWiring){S.newWiring=e.target.value; $('newWiring').value=e.target.value;}
   if(id==='testDist'&&e.target.value==='manual'){const r=calc(S); const sg=r.segs||estimate(S).segs; if(sg) S.sides.forEach((x,i)=>{x.wire=[0,1,2].map(j=>+sg[3*i+j].L1.toFixed(3));});}
-  S[id]=e.target.value; if(id==='testDist') S.locked=false; markEdited(); save(); update();}));
+  S[id]=e.target.value; if(id==='testDist'){S.locked=false; S.nextRound=e.target.value==='manual'&&S.nextRound;} markEdited(); save(); update();}));
 CHK.forEach(id=>$(id).addEventListener('change',e=>{S[id]=e.target.checked; save(); update();}));
 $('zones').addEventListener('input',e=>{
   const el=e.target, i=+el.dataset.i, f=el.dataset.f; if(!f) return;
@@ -930,10 +932,10 @@ $('steps').addEventListener('click',e=>{
   const redesign=()=>{S.testDist='design'; S.locked=false; if(hadReadings) S.sides.forEach(x=>{x.T=[NaN,NaN,NaN];});};
   if(act==='sizeP'){S.designP=parseFloat(b.dataset.p); redesign();}
   else if(act==='fitLoss'){S.lossMult=parseFloat(b.dataset.f); if(S.testDist==='manual'&&!S.locked){} }
-  else if(act==='byLoss'){redesign();}
+  else if(act==='byLoss'||act==='toDesign'){redesign();}
   else if(act==='modeTarget'){S.mode='target';}
   markEdited(); save(); renderSetup(); renderZones(); update();
-  if((act==='sizeP'||act==='byLoss')&&hadReadings){$('nextMsg').textContent='Layout redesigned, so the old readings were cleared. Build the new layout and enter its readings.'; $('nextMsg').className='note ok-t';}
+  if((act==='sizeP'||act==='byLoss'||act==='toDesign')&&hadReadings){$('nextMsg').textContent='Layout redesigned, so the old readings were cleared. Build the new layout and enter its readings.'; $('nextMsg').className='note ok-t';}
 });
 $('fillEst').addEventListener('click',()=>{
   const E=window.__est; if(!E||!E.T) return;
@@ -944,7 +946,7 @@ $('reset').addEventListener('click',()=>{S=clone(EXAMPLE); isExample=true; save(
 $('nextRound').addEventListener('click',()=>{
   const r=window.__last; if(!r||!r.segs) return;
   S.sides.forEach((x,i)=>{x.wire=[0,1,2].map(j=>+r.segs[3*i+j].L2.toFixed(3));});
-  S.testDist='manual'; S.testWiring=S.newWiring; S.vTest=S.vNew; markEdited(); save(); renderSetup(); renderZones(); update();
+  S.testDist='manual'; S.nextRound=true; markEdited(); save(); renderSetup(); renderZones(); update();
   $('nextMsg').textContent='Next round set up. Enter the new probe readings and the room temperature from that test.'; $('nextMsg').className='note ok-t';
 });
 $('copy').addEventListener('click',()=>{
