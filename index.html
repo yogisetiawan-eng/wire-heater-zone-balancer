@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Wire Heater Zone Balancer</title>
-<meta name="description" content="Rebalance silicone heater wire length per side from each side's area, wire ohm/m and measured surface temperature.">
+<meta name="description" content="Balance silicone heater wire per side from three probe temperatures per side, with a heat map of every surface.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -13,11 +13,11 @@
 body{margin:0}
 img{max-width:100%}
 [hidden]{display:none!important}
-/* Layout: instrument panel — setup rail on the left; zones in, results out, temperature strip below */
+/* Layout: instrument panel — setup rail on the left; zones in, heat map, results out */
 :root{
   --bg:#eceff3; --panel:#ffffff; --ink:#17202b; --muted:#5a6676; --line:#d3d9e1; --field:#f5f7f9;
   --accent:#c2410c; --accent-ink:#ffffff; --cold:#1f6fcf; --ok:#1d8048; --hot:#c62828; --warn:#a45f00;
-  --band:rgba(29,128,72,.13);
+  --band:rgba(29,128,72,.13); --sideRow:#f3f5f8;
   --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
   --f-body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
@@ -25,35 +25,40 @@ img{max-width:100%}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#10151c; --panel:#18202a; --ink:#e5eaf0; --muted:#98a4b4; --line:#2b3644; --field:#0f141a;
   --accent:#f07a2e; --accent-ink:#1a0c02; --cold:#62a8f6; --ok:#52c385; --hot:#f27070; --warn:#e6a23c;
-  --band:rgba(82,195,133,.15); color-scheme:dark}}
+  --band:rgba(82,195,133,.15); --sideRow:#1d2632; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#10151c; --panel:#18202a; --ink:#e5eaf0; --muted:#98a4b4; --line:#2b3644; --field:#0f141a;
   --accent:#f07a2e; --accent-ink:#1a0c02; --cold:#62a8f6; --ok:#52c385; --hot:#f27070; --warn:#e6a23c;
-  --band:rgba(82,195,133,.15); color-scheme:dark}
+  --band:rgba(82,195,133,.15); --sideRow:#1d2632; color-scheme:dark}
 
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
-.wrap{max-width:1280px;margin:0 auto;padding-block:20px 48px;
+.wrap{max-width:1320px;margin:0 auto;padding-block:20px 48px;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   display:grid;gap:18px}
 header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 20px;border-bottom:2px solid var(--ink);padding-bottom:10px}
 h1{font-family:var(--f-display);font-weight:800;font-size:1.65rem;letter-spacing:-.01em;margin:0;text-wrap:balance}
-.sub{color:var(--muted);margin:0;max-width:62ch}
-.grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;align-items:start}
-@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.sub{color:var(--muted);margin:0;max-width:70ch}
+.grid{display:grid;grid-template-columns:310px minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:960px){.grid{grid-template-columns:minmax(0,1fr)}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;min-width:0}
 .main{display:grid;gap:18px;min-width:0}
 h2{font-family:var(--f-display);font-weight:600;font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;margin:0 0 12px;color:var(--muted)}
 fieldset{border:0;margin:0;padding:0;display:grid;gap:10px}
 fieldset+fieldset{margin-top:18px;padding-top:16px;border-top:1px dashed var(--line)}
 legend{font-weight:700;font-size:.9rem;margin-bottom:8px;padding:0}
-label.f{display:grid;grid-template-columns:1fr 118px;align-items:center;gap:10px;font-size:.92rem}
+label.f{display:grid;grid-template-columns:1fr 132px;align-items:center;gap:10px;font-size:.92rem}
 label.f span small{display:block;color:var(--muted);font-size:.78rem;line-height:1.25}
+.pair{display:grid;grid-template-columns:1fr 64px 64px;gap:8px;align-items:center;font-size:.92rem}
+.pair small{display:block;color:var(--muted);font-size:.78rem;line-height:1.25}
+.pair-head{display:grid;grid-template-columns:1fr 64px 64px;gap:8px;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.pair-head span{text-align:center}
 input,select{font:inherit;font-family:var(--f-mono);font-size:.88rem;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:4px;padding:6px 8px;width:100%;min-width:0}
 select{font-family:var(--f-body);font-size:.9rem}
+input[type=checkbox]{width:auto;accent-color:var(--accent)}
 input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-input[disabled]{opacity:.75}
-.unit{font-family:var(--f-mono);font-size:.75rem;color:var(--muted)}
+input[disabled]{opacity:.7}
+.unit{font-family:var(--f-mono);font-size:.72rem;color:var(--muted);text-transform:none;letter-spacing:0}
 details summary{cursor:pointer;font-weight:700;font-size:.9rem}
 details[open] summary{margin-bottom:10px}
 
@@ -61,52 +66,63 @@ details[open] summary{margin-bottom:10px}
 table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 th{font-family:var(--f-display);font-weight:600;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:bottom}
 th:first-child,td:first-child{text-align:left}
+th.grp{text-align:center;border-bottom:1px solid var(--line);padding-bottom:2px}
 td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--f-mono);font-size:.86rem;white-space:nowrap}
 td small{display:block;color:var(--muted);font-size:.72rem}
+td.gl,th.gl{border-left:1px solid var(--line)}
 #zones td{padding:5px 4px}
-#zones input{width:100%;min-width:76px;text-align:right}
-#zones input.nm{text-align:left;min-width:96px}
+#zones input{min-width:78px;text-align:right}
+#zones input.nm{text-align:left;min-width:92px}
 #zones input[type=color]{width:34px;min-width:34px;height:30px;padding:2px;cursor:pointer}
-.sidecell{display:flex;align-items:center;gap:8px}
+#results tr.side-row td{background:var(--sideRow);font-weight:600;border-top:2px solid var(--line)}
+#results tr.seg-row td:first-child{padding-left:28px;color:var(--muted);font-family:var(--f-body)}
+.sidecell{display:flex;align-items:center;gap:8px;font-family:var(--f-body)}
 .sw{width:12px;height:12px;border-radius:2px;flex:none;border:1px solid var(--line)}
 button{font:inherit;font-weight:600;font-size:.88rem;cursor:pointer;border-radius:4px;padding:7px 12px;border:1px solid var(--line);background:var(--field);color:var(--ink)}
 button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 button.x{padding:4px 8px;font-family:var(--f-mono);color:var(--muted)}
+button[disabled]{opacity:.5;cursor:not-allowed}
 .row-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
 .note{color:var(--muted);font-size:.82rem;margin:0}
 .example{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--warn);border:1px solid currentColor;border-radius:3px;padding:1px 6px;margin-left:8px;vertical-align:middle}
 
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
-.tile{background:var(--panel);padding:12px 14px;min-width:0}
-.tile .k{font-family:var(--f-display);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.tile .v{font-family:var(--f-mono);font-weight:600;font-size:1.25rem;margin-top:2px;font-variant-numeric:tabular-nums}
-.tile .d{font-size:.8rem;color:var(--muted)}
-.pill{display:inline-block;font-family:var(--f-body);font-weight:700;font-size:.7rem;letter-spacing:.04em;padding:1px 7px;border-radius:999px;border:1px solid currentColor;margin-left:6px;vertical-align:1px}
-.c-cold{color:var(--cold)} .c-ok{color:var(--ok)} .c-hot{color:var(--hot)} .c-warn{color:var(--warn)}
-.pos{color:var(--hot)} .neg{color:var(--cold)}
 .ws-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .wsf{display:grid;gap:4px;font-size:.8rem;color:var(--muted);flex:1 1 200px;min-width:0}
 .wsf input{font-family:var(--f-body);font-size:.92rem}
 .ws-sep{flex:0 0 1px;align-self:stretch;background:var(--line);margin:0 4px}
 @media (max-width:640px){.ws-sep{display:none}}
-button[disabled]{opacity:.5;cursor:not-allowed}
 #wsMsg{margin-top:10px}
-#wsMsg.ok{color:var(--ok)} #wsMsg.bad{color:var(--hot)}
-.errors{color:var(--hot);font-weight:600;margin:0}
-.errors:empty{display:none}
+.ok-t{color:var(--ok)} .bad-t{color:var(--hot)}
 
-svg text{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
-svg .lbl{fill:var(--ink);font-family:var(--f-body);font-size:12px;font-weight:600}
-svg .grid{stroke:var(--line);stroke-width:1}
-svg .band{fill:var(--band)}
-svg .bandedge{stroke:var(--ok);stroke-width:1;stroke-dasharray:3 3}
-svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none}
-.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.82rem;color:var(--muted);margin-top:6px}
-.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
-.method{font-size:.88rem;color:var(--muted);max-width:75ch}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.tile{background:var(--panel);padding:12px 14px;min-width:0}
+.tile .k{font-family:var(--f-display);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tile .v{font-family:var(--f-mono);font-weight:600;font-size:1.2rem;margin-top:2px;font-variant-numeric:tabular-nums}
+.tile .d{font-size:.8rem;color:var(--muted)}
+.c-cold{color:var(--cold)} .c-ok{color:var(--ok)} .c-hot{color:var(--hot)} .c-warn{color:var(--warn)}
+.pos{color:var(--hot)} .neg{color:var(--cold)}
+.errors{color:var(--hot);font-weight:600;margin:0}
+.errors:empty,.warns:empty{display:none}
+.warns{color:var(--warn);font-weight:600;margin:0;font-size:.9rem}
+
+.maps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+@media (max-width:760px){.maps{grid-template-columns:minmax(0,1fr)}}
+figure{margin:0;min-width:0}
+figcaption{font-weight:700;font-size:.9rem;margin-bottom:6px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+figcaption span{font-weight:400;color:var(--muted);font-family:var(--f-mono);font-size:.8rem}
+.map{width:100%;height:auto;display:block;background:var(--field);border:1px solid var(--line);border-radius:4px}
+.map text{font-family:var(--f-mono);fill:var(--ink)}
+.map .nm{font-family:var(--f-body);font-weight:700;fill:var(--muted)}
+.map .probe{fill:#ffffff;stroke:#17202b}
+.map .wire{fill:none;stroke:#17202b;stroke-opacity:.55;stroke-linejoin:round}
+.map .edge{fill:none;stroke:var(--line)}
+.map-opts{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-top:10px;font-size:.88rem}
+.map-opts label{display:flex;gap:6px;align-items:center}
+#scale{width:100%;max-width:640px;height:auto;display:block;margin-top:10px}
+#scale text{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
+.method{font-size:.88rem;color:var(--muted);max-width:80ch}
 .method p{margin:.4em 0}
 .method code{font-family:var(--f-mono);font-size:.82rem;color:var(--ink)}
-@media (prefers-reduced-motion:no-preference){.tile .v,td{transition:color .2s}}
 </style>
 </head>
 <body>
@@ -114,7 +130,7 @@ svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none}
   <header>
     <div>
       <h1>Wire Heater Zone Balancer</h1>
-      <p class="sub">Enter each side's area, wire Ω/m and measured SS temperature from a test run. It redistributes the wire so every side lands at the same temperature.</p>
+      <p class="sub">Enter each side's size, wire Ω/m and three probe temperatures from a test run. It keeps one wire zone per side, grades the wire pitch along each side, and balances everything to one temperature.</p>
     </div>
     <button id="copy" type="button">Copy results for Sheets</button>
   </header>
@@ -140,20 +156,30 @@ svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none}
       <h2>Setup</h2>
       <fieldset>
         <legend>Test run (what you measured)</legend>
-        <label class="f"><span>Supply voltage</span><input id="vTest" type="number" step="0.1"></label>
+        <label class="f"><span>Supply voltage<small>V</small></span><input id="vTest" type="number" step="0.1"></label>
         <label class="f"><span>Room temperature<small>during the test, °C</small></span><input id="roomTest" type="number" step="0.1"></label>
         <label class="f"><span>Wiring</span>
-          <select id="testWiring"><option value="series">One series string</option><option value="parallel">Separate string per side</option></select></label>
+          <select id="testWiring"><option value="series">One series string</option><option value="parallel">One string per side</option></select></label>
         <label class="f"><span>Wire distribution</span>
-          <select id="testDist"><option value="area">Even by area</option><option value="manual">Length per side</option></select></label>
-        <label class="f" id="testTotalRow"><span>Total wire length<small>m, spread by area</small></span><input id="testTotalL" type="number" step="0.01"></label>
+          <select id="testDist"><option value="area">Even by area</option><option value="manual">Length per section</option></select></label>
+        <label class="f" id="testTotalRow"><span>Total wire length<small>m, spread evenly by area</small></span><input id="testTotalL" type="number" step="0.01"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Plate (heat spreading)</legend>
+        <div class="pair-head"><span></span><span>mm</span><span>W/m·K</span></div>
+        <div class="pair"><span>Front plate<small>e.g. stainless 16</small></span><input id="t1" type="number" step="0.1" min="0" aria-label="Front plate thickness mm"><input id="k1" type="number" step="1" min="0" aria-label="Front plate conductivity"></div>
+        <div class="pair"><span>Backing plate<small>e.g. aluminium 160–205, 0 mm if none</small></span><input id="t2" type="number" step="0.1" min="0" aria-label="Backing plate thickness mm"><input id="k2" type="number" step="1" min="0" aria-label="Backing plate conductivity"></div>
+        <label class="f"><span>Sides joined at corners</span>
+          <select id="ring"><option value="yes">Yes, closed frame</option><option value="no">No, separate strips</option></select></label>
       </fieldset>
       <fieldset>
         <legend>New layout</legend>
-        <label class="f"><span>Supply voltage</span><input id="vNew" type="number" step="0.1"></label>
+        <label class="f"><span>Supply voltage<small>V</small></span><input id="vNew" type="number" step="0.1"></label>
         <label class="f"><span>Ambient<small>operating, °C</small></span><input id="ambNew" type="number" step="0.1"></label>
         <label class="f"><span>Wiring</span>
-          <select id="newWiring"><option value="series">One series string</option><option value="parallel">Separate string per side</option></select></label>
+          <select id="newWiring"><option value="series">One series string</option><option value="parallel">One string per side</option></select></label>
+        <label class="f"><span>Pitch along each side</span>
+          <select id="pitchMode"><option value="graded">Graded (3 sections)</option><option value="uniform">Uniform</option></select></label>
         <label class="f"><span>Total power</span>
           <select id="mode"><option value="same">Same as test</option><option value="target">Hit target temp</option><option value="custom">Custom watts</option></select></label>
         <label class="f" id="targetRow"><span>Target SS temp<small>°C</small></span><input id="target" type="number" step="0.1"></label>
@@ -165,8 +191,7 @@ svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none}
         <details>
           <summary>Advanced</summary>
           <div style="display:grid;gap:10px">
-            <label class="f"><span>Correction gain k<small>1 = plain; 1.2–1.5 over-corrects for corner heat sharing</small></span><input id="k" type="number" step="0.05" min="0"></label>
-            <label class="f"><span>Loss exponent n<small>convection + radiation rise with ΔT</small></span><input id="n" type="number" step="0.01" min="0"></label>
+            <label class="f"><span>Loss exponent n<small>convection + radiation rise with ΔT; 0 = linear</small></span><input id="n" type="number" step="0.01" min="0" max="1"></label>
             <label class="f"><span>Wire-to-plate R′<small>m·K/W, taped under Al foil</small></span><input id="rth" type="number" step="0.1" min="0"></label>
             <label class="f"><span>Wire OD<small>mm, for pitch check</small></span><input id="od" type="number" step="0.1" min="0"></label>
           </div>
@@ -179,56 +204,66 @@ svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none}
         <h2>Zones <span class="example" id="exTag">Example values</span></h2>
         <div class="tbl-wrap">
           <table id="zones">
-            <thead><tr>
-              <th>Side</th><th></th><th>Area<br><span class="unit">mm²</span></th><th>Wire<br><span class="unit">Ω/m</span></th>
-              <th>Test length<br><span class="unit">m</span></th><th>Measured SS<br><span class="unit">°C</span></th><th></th>
-            </tr></thead>
+            <thead>
+              <tr><th></th><th></th><th class="grp gl" colspan="3">Side</th><th class="grp gl" colspan="3">Test wire per section <span class="unit">m</span></th><th class="grp gl" colspan="3">Measured SS per probe <span class="unit">°C</span></th><th></th></tr>
+              <tr><th>Name</th><th></th><th class="gl">Length<br><span class="unit">mm</span></th><th>Width<br><span class="unit">mm</span></th><th>Wire<br><span class="unit">Ω/m</span></th>
+                <th class="gl">S1</th><th>S2</th><th>S3</th><th class="gl">T1</th><th>T2</th><th>T3</th><th></th></tr>
+            </thead>
             <tbody></tbody>
           </table>
         </div>
         <div class="row-actions">
           <button id="add" type="button">Add side</button>
           <button id="reset" type="button">Reset to example</button>
-          <p class="note">Measure each side at steady state (≥ 1 h), at a comparable spot.</p>
         </div>
+        <p class="note" style="margin-top:10px">List the sides clockwise from the top. Each side is split into three equal sections; put probe T1, T2 and T3 at 1/6, 1/2 and 5/6 of its length, measured clockwise (top: left → right, right: top → bottom, bottom: right → left, left: bottom → top). Read at steady state, ≥ 1 h, with the heater full-on.</p>
       </section>
 
       <p class="errors" id="errors"></p>
+      <p class="warns" id="warns"></p>
 
       <div class="tiles" id="tiles"></div>
+
+      <section class="panel">
+        <h2>Heat distribution</h2>
+        <div class="maps">
+          <figure><figcaption>Measured · test layout <span id="capTest"></span></figcaption><svg class="map" id="mapTest" role="img" aria-label="Measured temperature map with test wire layout"></svg></figure>
+          <figure><figcaption>Predicted · new layout <span id="capNew"></span></figcaption><svg class="map" id="mapNew" role="img" aria-label="Predicted temperature map with new wire layout"></svg></figure>
+        </div>
+        <svg id="scale" viewBox="0 0 640 60" role="img" aria-label="Temperature colour scale"></svg>
+        <div class="map-opts">
+          <label for="showWire"><input type="checkbox" id="showWire"> Show wire layout</label>
+          <label for="showProbes"><input type="checkbox" id="showProbes"> Show probe values</label>
+          <span class="note">Colour between probes is interpolated. Wire runs are drawn at the real pitch.</span>
+        </div>
+      </section>
 
       <section class="panel">
         <h2>New layout per side</h2>
         <div class="tbl-wrap">
           <table id="results">
             <thead><tr>
-              <th>Side</th><th>Test power<br><span class="unit">W</span></th><th>Heat loss<br><span class="unit">W/K</span></th>
-              <th>New power<br><span class="unit">W</span></th><th>New length<br><span class="unit">mm</span></th><th>Change<br><span class="unit">mm</span></th>
-              <th>Wire load<br><span class="unit">W/m</span></th><th>Pitch<br><span class="unit">mm</span></th>
-              <th>Predicted SS<br><span class="unit">°C</span></th><th>Wire est.<br><span class="unit">°C</span></th>
+              <th>Zone / section</th><th>Probe at<br><span class="unit">mm</span></th><th>Measured<br><span class="unit">°C</span></th>
+              <th>Test power<br><span class="unit">W</span></th><th>Heat loss<br><span class="unit">W/K</span></th><th>New power<br><span class="unit">W</span></th>
+              <th>New wire<br><span class="unit">mm</span></th><th>Change<br><span class="unit">mm</span></th><th>Wire load<br><span class="unit">W/m</span></th>
+              <th>Pitch<br><span class="unit">mm</span></th><th>Predicted<br><span class="unit">°C</span></th><th>Wire est.<br><span class="unit">°C</span></th>
             </tr></thead>
             <tbody></tbody>
           </table>
         </div>
-      </section>
-
-      <section class="panel">
-        <h2>SS temperature per side</h2>
-        <div class="tbl-wrap"><svg id="chart" role="img" aria-label="Measured and predicted temperature per side"></svg></div>
-        <div class="legend">
-          <span><i style="border:2px solid var(--muted);background:transparent"></i>Measured (test)</span>
-          <span><i style="background:var(--ok)"></i>Predicted (new layout)</span>
-          <span><i style="background:var(--band);border-radius:2px"></i>Spec band</span>
+        <div class="row-actions">
+          <button id="nextRound" type="button">Use this layout for the next test</button>
+          <p class="note" id="nextMsg">Copies the new wire per section into the test inputs, so you only enter the new probe readings.</p>
         </div>
       </section>
 
       <section class="method">
         <h2>How it calculates</h2>
-        <p>Test power per side comes from the wiring. In one series string every side carries the same current, so <code>Pᵢ = I²·Ω/mᵢ·Lᵢ</code> with <code>I = V / ΣRᵢ</code>. With a separate string per side, <code>Pᵢ = V² / (Ω/mᵢ·Lᵢ)</code>. Each side's heat loss is <code>Gᵢ = Pᵢ / (Tᵢ − T_room)</code>.</p>
-        <p>Loss rises slightly faster than ΔT (convection and radiation), modelled as <code>Pᵢ = Gᵢ·ΔTᵢ,test^(−n)·ΔT^(1+n)</code>. The new power splits in proportion to <code>Gᵢ·ΔTᵢ,test^(−n)</code> (just <code>Gᵢ</code> when n = 0), so every side reaches the same temperature. Wire length then follows from the new power and supply voltage: series <code>R_total = V²/P</code>, <code>Lᵢ = R_total·(Pᵢ/P) / Ω/mᵢ</code>; separate strings <code>Lᵢ = V² / (Pᵢ·Ω/mᵢ)</code>.</p>
-        <p>Use full-on power for the test. If a thermostat or PID was cycling during the test, the real power was lower than calculated: the split between sides still holds, but the total watts in target mode will be overstated.</p>
-        <p>Neighbouring sides share heat at the corners, so the first correction is usually a little short. Rebuild, measure again, switch distribution to <em>Length per side</em>, enter the lengths you used and the new temperatures, and run it again. Raise gain k above 1 to correct harder in one step.</p>
-        <p>Wire estimate = predicted SS + wire load × R′. Pitch = area ÷ wire length for a serpentine. Both are estimates; check the silicone rating with your supplier.</p>
+        <p><b>Sections.</b> Each side is split into three equal sections, one per probe, so a frame of four sides becomes twelve sections. Test power per section follows from the wiring: in one series string every section carries <code>I = V / ΣRᵢ</code>, so <code>Pᵢ = I²·Ω/m·Lᵢ</code>; with one string per side the current is <code>V / (Ω/m·L_side)</code>.</p>
+        <p><b>Heat sharing.</b> Neighbouring sections exchange heat through the plate: <code>Kᵢⱼ = k·t·width / spacing</code>, summed over the front and backing plates, with corner links when the sides form a closed frame. Each section's own loss to the room is then <code>Gᵢ = (Pᵢ − Σ Kᵢⱼ·(Tᵢ − Tⱼ)) / (Tᵢ − T_room)</code>. This takes out the heat a section only passes along to its neighbours, which the simple one-probe method could not.</p>
+        <p><b>Balancing.</b> Loss rises slightly faster than ΔT, modelled as <code>Gᵢ·ΔTᵢ,test^(−n)·ΔT^(1+n)</code>. When every section sits at the same temperature no heat flows between them, so the graded layout gives each section <code>Pᵢ = Gᵢ·ΔTᵢ,test^(−n)·ΔT^(1+n)</code>. That sets each side's wire total and how it is spread over its three sections. With uniform pitch each side's power is spread evenly, and the four side powers are chosen by least squares to flatten the temperature as far as possible.</p>
+        <p><b>Wire.</b> In series <code>R_total = V²/P</code> and each section's wire is <code>Lᵢ = R_total·(Pᵢ/P) / Ω/m</code>; with one string per side, <code>L_side = V² / (P_side·Ω/m)</code>. Pitch = section area ÷ wire length. Wire estimate = predicted SS + wire load × R′.</p>
+        <p><b>Prediction.</b> Predicted temperatures come from solving the full heat balance, sharing included, with the new powers. Rebuild, measure again and press <i>Use this layout for the next test</i> to refine. Use full-on power for the test: if a controller was cycling, the real power was lower than calculated.</p>
       </section>
     </div>
   </div>
@@ -236,91 +271,235 @@ svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none}
 
 <script>
 (function(){
-const KEY='wire-heater-balancer-v1';
+const KEY='wire-heater-balancer-v2', KEY_V1='wire-heater-balancer-v1', WSKEY='wire-heater-balancer-workspaces-v1';
 const EXAMPLE={
   vTest:48, roomTest:22, testWiring:'series', testDist:'area', testTotalL:6.4,
-  vNew:48, ambNew:19, newWiring:'series', mode:'same', target:38.5, customP:55,
-  bandMin:37, bandMax:40, k:1, n:0.12, rth:2.5, od:3,
+  t1:2, k1:16, t2:0, k2:205, ring:'yes',
+  vNew:48, ambNew:19, newWiring:'series', pitchMode:'graded', mode:'same', target:38.5, customP:55,
+  bandMin:37, bandMax:40, n:0.12, rth:2.5, od:3, showWire:true, showProbes:true,
   sides:[
-    {name:'Top',    color:'#e02424', area:35950, rp:8, len:1.887, temp:36.2},
-    {name:'Right',  color:'#3b48c4', area:27950, rp:8, len:1.467, temp:35.1},
-    {name:'Bottom', color:'#f2d000', area:24950, rp:8, len:1.309, temp:31.9},
-    {name:'Left',   color:'#111111', area:33110, rp:8, len:1.738, temp:33.8}
+    {name:'Top',    color:'#e02424', length:495, width:73, rp:8, wire:[0.629,0.629,0.629], T:[35.4,36.6,35.9]},
+    {name:'Right',  color:'#3b48c4', length:400, width:70, rp:8, wire:[0.488,0.488,0.488], T:[35.6,35.3,34.0]},
+    {name:'Bottom', color:'#f2d000', length:426, width:59, rp:8, wire:[0.437,0.437,0.437], T:[32.5,31.6,32.2]},
+    {name:'Left',   color:'#111111', length:475, width:70, rp:8, wire:[0.579,0.579,0.579], T:[32.9,33.6,34.8]}
   ]
 };
+const NUM=['vTest','roomTest','testTotalL','t1','k1','t2','k2','vNew','ambNew','target','customP','bandMin','bandMax','n','rth','od'];
+const SEL=['testWiring','testDist','ring','newWiring','pitchMode','mode'];
+const CHK=['showWire','showProbes'];
 const clone=o=>JSON.parse(JSON.stringify(o));
-let S=clone(EXAMPLE), isExample=true;
-try{const raw=localStorage.getItem(KEY); if(raw){const p=JSON.parse(raw); const st=p&&(p.state||p); if(st&&Array.isArray(st.sides)&&st.sides.length){S=Object.assign(clone(EXAMPLE),st); isExample=!!p.isExample;}}}catch(e){}
-function save(){try{localStorage.setItem(KEY,JSON.stringify({state:S,isExample}))}catch(e){}}
-
 const $=id=>document.getElementById(id);
 const sum=a=>a.reduce((x,y)=>x+y,0);
 const fmt=(x,d=1)=>Number.isFinite(x)?x.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}):'—';
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-const NUM=['vTest','roomTest','testTotalL','vNew','ambNew','target','customP','bandMin','bandMax','k','n','rth','od'];
-const SEL=['testWiring','testDist','newWiring','mode'];
-
-function calc(s){
-  const sd=s.sides, err=[];
-  const area=sd.map(x=>+x.area), rp=sd.map(x=>+x.rp), T1=sd.map(x=>+x.temp);
-  const Atot=sum(area);
-  const L1=sd.map((x,i)=> s.testDist==='area' ? s.testTotalL*area[i]/Atot : +x.len);
-  sd.forEach((x,i)=>{
-    const nm=x.name||('Side '+(i+1));
-    if(!(area[i]>0)) err.push(nm+': area must be above 0.');
-    if(!(rp[i]>0)) err.push(nm+': wire Ω/m must be above 0.');
-    if(!(L1[i]>0)) err.push(nm+': test length must be above 0.');
-    if(!(T1[i]-s.roomTest>0)) err.push(nm+': measured temperature must be above the test room temperature.');
+// ---------- state, migration ----------
+function migrate(st){
+  const out=Object.assign(clone(EXAMPLE),clone(st||{}));
+  const sides=Array.isArray(st&&st.sides)?st.sides:[];
+  out.sides=sides.map((x,i)=>{
+    x=x||{};
+    if(Array.isArray(x.T)){ // v2
+      return {name:String(x.name!=null?x.name:'Side '+(i+1)),color:/^#[0-9a-f]{6}$/i.test(x.color)?x.color:'#7a8699',
+        length:parseFloat(x.length),width:parseFloat(x.width),rp:parseFloat(x.rp),
+        wire:[0,1,2].map(j=>parseFloat((x.wire||[])[j])),T:[0,1,2].map(j=>parseFloat(x.T[j]))};
+    }
+    // v1: {area mm², rp, len m (test wire), temp}
+    const w=60, a=parseFloat(x.area), l=parseFloat(x.len), t=parseFloat(x.temp);
+    return {name:String(x.name!=null?x.name:'Side '+(i+1)),color:/^#[0-9a-f]{6}$/i.test(x.color)?x.color:'#7a8699',
+      length:a>0?Math.round(a/w):NaN,width:w,rp:parseFloat(x.rp),wire:[l/3,l/3,l/3],T:[t,t,t]};
   });
-  if(!(s.vTest>0)||!(s.vNew>0)) err.push('Supply voltage must be above 0.');
-  if(!Number.isFinite(+s.roomTest)) err.push('Enter the test room temperature.');
-  if(!Number.isFinite(+s.ambNew)) err.push('Enter the operating ambient.');  if(!sd.length) err.push('Add at least one side.');
-  if(err.length) return {err};
+  if(sides.some(x=>x&&!Array.isArray(x.T)) && st.testDist==null) out.testDist='manual';
+  NUM.forEach(id=>{out[id]=parseFloat(out[id]);});
+  SEL.forEach(id=>{const opts=[...$(id).options].map(o=>o.value); if(!opts.includes(out[id])) out[id]=EXAMPLE[id];});
+  CHK.forEach(id=>{out[id]=out[id]!==false;});
+  delete out.k;
+  return out;
+}
+let S=clone(EXAMPLE), isExample=true;
+try{
+  let raw=localStorage.getItem(KEY), fromV1=false;
+  if(!raw){raw=localStorage.getItem(KEY_V1); fromV1=!!raw;}
+  if(raw){const p=JSON.parse(raw); const st=p&&(p.state||p); if(st&&Array.isArray(st.sides)&&st.sides.length){S=migrate(st); isExample=fromV1?false:!!p.isExample;}}
+}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({state:S,isExample}))}catch(e){}}
 
-  const R1=L1.map((l,i)=>l*rp[i]);
-  let P1, I1;
-  if(s.testWiring==='series'){I1=s.vTest/sum(R1); P1=R1.map(r=>I1*I1*r);}
-  else P1=R1.map(r=>s.vTest*s.vTest/r);
-  const dT1=T1.map(t=>t-s.roomTest);
-  const G=P1.map((p,i)=>p/dT1[i]);
-  const n=Math.max(0,+s.n||0), k=Number.isFinite(+s.k)?Math.max(0,+s.k):1, rth=Number.isFinite(+s.rth)?Math.max(0,+s.rth):0;
-  const base=G.map((g,i)=>g*Math.pow(dT1[i],-n));           // P = base · ΔT^(1+n)
-  const dTm=sum(dT1.map((d,i)=>d*area[i]))/Atot;
-  const w=base.map((b,i)=>b*Math.pow(dTm/dT1[i],k-1));
-  const share=w.map(x=>x/sum(w));
-  const P1tot=sum(P1);
-  let Ptot;
-  if(s.mode==='same') Ptot=P1tot;
-  else if(s.mode==='custom') Ptot=+s.customP;
-  else{
-    const dTn=s.target-s.ambNew;
-    if(!(dTn>0)) return {err:['Target temperature must be above the operating ambient.']};
-    Ptot=sum(base)*Math.pow(dTn,1+n);
+// ---------- linear algebra ----------
+function solve(A,b){
+  const n=b.length, M=A.map((r,i)=>r.slice().concat([b[i]]));
+  for(let c=0;c<n;c++){
+    let p=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[p][c])) p=r;
+    if(Math.abs(M[p][c])<1e-300) return null;
+    [M[c],M[p]]=[M[p],M[c]];
+    for(let r=c+1;r<n;r++){const f=M[r][c]/M[c][c]; if(f) for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k];}
   }
-  if(!(Ptot>0)) return {err:['Total power must be above 0.']};
-  const P2=share.map(x=>x*Ptot);
-  const V=s.vNew;
-  let L2, q, I2, Rtot2;
-  if(s.newWiring==='series'){
-    Rtot2=V*V/Ptot; I2=Ptot/V;
-    L2=P2.map((p,i)=>(Rtot2*p/Ptot)/rp[i]);
-    q=rp.map(r=>I2*I2*r);
-  }else{
-    L2=P2.map((p,i)=>V*V/(p*rp[i]));
-    q=P2.map((p,i)=>p/L2[i]);
-    Rtot2=1/sum(L2.map((l,i)=>1/(l*rp[i]))); I2=Ptot/V;
+  const x=new Array(n);
+  for(let r=n-1;r>=0;r--){let s=M[r][n]; for(let k=r+1;k<n;k++) s-=M[r][k]*x[k]; x[r]=s/M[r][r];}
+  return x;
+}
+function sysMatrix(geff,links){
+  const M=geff.length, A=Array.from({length:M},()=>new Array(M).fill(0));
+  for(let i=0;i<M;i++) A[i][i]=geff[i];
+  for(const [i,j,K] of links){A[i][i]+=K;A[j][j]+=K;A[i][j]-=K;A[j][i]-=K;}
+  return A;
+}
+// steady state ΔT for given section powers: Pᵢ = bᵢ·ΔTᵢ^(1+n) + Σ Kᵢⱼ(ΔTᵢ−ΔTⱼ)
+function forward(P,b,n,links,init){
+  let d=init?init.slice():P.map(()=>10);
+  for(let it=0;it<500;it++){
+    const g=b.map((bi,i)=>bi*Math.pow(Math.max(d[i],1e-6),n));
+    const dn=solve(sysMatrix(g,links),P); if(!dn) return null;
+    for(let i=0;i<dn.length;i++) dn[i]=Math.pow(Math.max(d[i],1e-12),n/(1+n))*Math.pow(Math.max(dn[i],1e-12),1/(1+n));
+    let diff=0; for(let i=0;i<d.length;i++) diff=Math.max(diff,Math.abs(dn[i]-d[i]));
+    d=dn; if(diff<1e-10) return d;
   }
-  const dT2=P2.map((p,i)=>Math.pow(p/base[i],1/(1+n)));
-  const T2=dT2.map(d=>s.ambNew+d);
-  const Tw=T2.map((t,i)=>t+q[i]*rth);
-  const pitch=L2.map((l,i)=>area[i]/(l*1000));
-  const rows=sd.map((x,i)=>({name:x.name||('Side '+(i+1)),color:x.color,P1:P1[i],G:G[i],P2:P2[i],L1:L1[i],L2:L2[i],q:q[i],pitch:pitch[i],T1:T1[i],T2:T2[i],Tw:Tw[i]}));
-  return {rows,P1tot,Ptot,Rtot2,I2,L1tot:sum(L1),L2tot:sum(L2),Gtot:sum(G),
-    spread1:Math.max(...T1)-Math.min(...T1),spread2:Math.max(...T2)-Math.min(...T2),
-    T2min:Math.min(...T2),T2max:Math.max(...T2)};
+  return null;
 }
 
+// ---------- model ----------
+function calc(s){
+  const sd=s.sides||[], err=[], warn=[];
+  if(!sd.length) return {err:['Add at least one side.']};
+  if(!(s.vTest>0)||!(s.vNew>0)) err.push('Supply voltage must be above 0.');
+  if(!Number.isFinite(+s.roomTest)) err.push('Enter the test room temperature.');
+  if(!Number.isFinite(+s.ambNew)) err.push('Enter the operating ambient.');
+  if(s.testDist==='area' && !(s.testTotalL>0)) err.push('Total wire length must be above 0.');
+  const N=sd.length, M=3*N;
+  const areaSide=sd.map(x=>(+x.length)*(+x.width)), Atot=sum(areaSide);
+  const segA=[],side=[],L1=[],T1=[],pos=[],rp=[];
+  sd.forEach((x,si)=>{
+    const nm=x.name||('Side '+(si+1));
+    if(!(+x.length>0)) err.push(nm+': length must be above 0.');
+    if(!(+x.width>0)) err.push(nm+': width must be above 0.');
+    if(!(+x.rp>0)) err.push(nm+': wire Ω/m must be above 0.');
+    for(let j=0;j<3;j++){
+      const l=s.testDist==='area'?s.testTotalL*areaSide[si]/Atot/3:+(x.wire||[])[j];
+      const t=+(x.T||[])[j];
+      if(s.testDist!=='area' && !(l>0)) err.push(`${nm} S${j+1}: test wire must be above 0.`);
+      if(!(t-s.roomTest>0)) err.push(`${nm} T${j+1}: must be above the test room temperature.`);
+      segA.push(areaSide[si]/3); side.push(si); L1.push(l); T1.push(t); pos.push((j+0.5)*(+x.length)/3); rp.push(+x.rp);
+    }
+  });
+  if(err.length) return {err:[...new Set(err)]};
+
+  // test power per section
+  const P1=new Array(M);
+  if(s.testWiring==='series'){
+    const R=sum(L1.map((l,i)=>l*rp[i])), I=s.vTest/R;
+    for(let i=0;i<M;i++) P1[i]=I*I*rp[i]*L1[i];
+  }else{
+    for(let si=0;si<N;si++){
+      const Ls=L1[3*si]+L1[3*si+1]+L1[3*si+2], Is=s.vTest/(rp[3*si]*Ls);
+      for(let j=0;j<3;j++){const i=3*si+j; P1[i]=Is*Is*rp[i]*L1[i];}
+    }
+  }
+  // conduction links (W/K); k·t in W/K with t in m
+  const kt=(Math.max(0,+s.t1||0)*Math.max(0,+s.k1||0)+Math.max(0,+s.t2||0)*Math.max(0,+s.k2||0))/1000;
+  const links=[];
+  if(kt>0){
+    for(let si=0;si<N;si++) for(let j=0;j<2;j++)
+      links.push([3*si+j,3*si+j+1,kt*(+sd[si].width)/((+sd[si].length)/3)]);
+    if(s.ring==='yes' && N>=3) for(let si=0;si<N;si++){
+      const nx=(si+1)%N, dist=((+sd[si].length)+(+sd[nx].length))/6, w=Math.min(+sd[si].width,+sd[nx].width);
+      links.push([3*si+2,3*nx,kt*w/dist]);
+    }
+  }
+  const dT1=T1.map(t=>t-s.roomTest);
+  const lat=new Array(M).fill(0);
+  for(const [i,j,K] of links){lat[i]+=K*(T1[i]-T1[j]); lat[j]+=K*(T1[j]-T1[i]);}
+  const G=new Array(M), clamped=[];
+  for(let i=0;i<M;i++){
+    const g=(P1[i]-lat[i])/dT1[i], gmin=0.05*P1[i]/dT1[i];
+    if(!(g>=gmin)){G[i]=gmin; clamped.push(i);} else G[i]=g;
+  }
+  if(clamped.length) warn.push(`Readings at ${clamped.map(i=>(sd[side[i]].name||'Side '+(side[i]+1))+' T'+(i%3+1)).join(', ')} read hotter than their neighbours by more than that section's heater could push through the plate (its heat loss would come out negative). Check those probes, or lower the plate thickness or conductivity.`);
+  const n=Math.min(1,Math.max(0,Number.isFinite(+s.n)?+s.n:0));
+  const b=G.map((g,i)=>g*Math.pow(dT1[i],-n));       // loss: bᵢ·ΔT^(1+n)
+  const rth=Number.isFinite(+s.rth)?Math.max(0,+s.rth):0;
+
+  // check: model reproduces the test
+  const dChk=forward(P1,b,n,links,dT1);
+  const chkErr=dChk?Math.max(...dChk.map((d,i)=>Math.abs(d-dT1[i]))):NaN;
+  if(!(chkErr<=0.05)) warn.push(`The model reproduces the test only to ±${Number.isFinite(chkErr)?chkErr.toFixed(1):'?'} K, so treat this layout as a rough guide.`);
+
+  // total power / target
+  const P1tot=sum(P1);
+  let Ptot=null, dTt=null;
+  if(s.mode==='target'){dTt=s.target-s.ambNew; if(!(dTt>0)) return {err:['Target temperature must be above the operating ambient.']};}
+  else{Ptot=s.mode==='same'?P1tot:+s.customP; if(!(Ptot>0)) return {err:['Total power must be above 0.']};}
+
+  let P2;
+  if(s.pitchMode!=='uniform'){
+    const dTu=dTt!=null?dTt:Math.pow(Ptot/sum(b),1/(1+n));
+    P2=b.map(x=>x*Math.pow(dTu,1+n));
+  }else{
+    // one power per side, spread evenly over its 3 sections; least-squares flattest field
+    const dRef=dTt!=null?dTt:Math.pow(Ptot/sum(b),1/(1+n));
+    let d=new Array(M).fill(dRef), p=new Array(N).fill(0);
+    const w=segA, sw=sum(w);
+    const spread=p=>{const P=new Array(M); for(let i=0;i<M;i++) P[i]=p[side[i]]/3; return P;};
+    for(let it=0;it<12;it++){
+      const g=b.map((bi,i)=>bi*Math.pow(Math.max(d[i],1e-6),n));
+      const A=sysMatrix(g,links);
+      const X=Array.from({length:M},()=>new Array(N).fill(0));
+      for(let c=0;c<N;c++){const col=solve(A,side.map(si=>si===c?1/3:0)); for(let i=0;i<M;i++) X[i][c]=col[i];}
+      let sol;
+      if(dTt!=null){
+        const Q=Array.from({length:N},()=>new Array(N).fill(0)), r=new Array(N).fill(0);
+        for(let a=0;a<N;a++){for(let c=0;c<N;c++){let q=0; for(let i=0;i<M;i++) q+=X[i][a]*w[i]*X[i][c]; Q[a][c]=q;} let rr=0; for(let i=0;i<M;i++) rr+=X[i][a]*w[i]*dTt; r[a]=rr;}
+        sol=solve(Q,r);
+      }else{
+        const mean=new Array(N).fill(0);
+        for(let c=0;c<N;c++){let m=0; for(let i=0;i<M;i++) m+=w[i]*X[i][c]; mean[c]=m/sw;}
+        const D=X.map(row=>row.map((v,c)=>v-mean[c]));
+        const K=Array.from({length:N+1},()=>new Array(N+1).fill(0)), r=new Array(N+1).fill(0);
+        let tr=0;
+        for(let a=0;a<N;a++) for(let c=0;c<N;c++){let q=0; for(let i=0;i<M;i++) q+=D[i][a]*w[i]*D[i][c]; K[a][c]=2*q; if(a===c) tr+=q;}
+        for(let a=0;a<N;a++){K[a][a]+=1e-12*(tr||1); K[a][N]=1; K[N][a]=1;}
+        r[N]=Ptot;
+        const z=solve(K,r); sol=z&&z.slice(0,N);
+      }
+      if(!sol) return {err:['The uniform-pitch balance could not be solved for these inputs.']};
+      p=sol.map(v=>Math.max(v,1e-9));
+      if(Ptot!=null){const f=Ptot/sum(p); p=p.map(v=>v*f);}
+      const dn=forward(spread(p),b,n,links,d); if(!dn) break;
+      let diff=0; for(let i=0;i<M;i++) diff=Math.max(diff,Math.abs(dn[i]-d[i])); d=dn; if(diff<1e-9) break;
+    }
+    if(sol_negative(p)) warn.push('One side would need negative power to balance with uniform pitch. Use graded pitch.');
+    P2=spread(p);
+  }
+  function sol_negative(p){return p.some(v=>v<=1e-9);}
+  const Ptot2=sum(P2);
+  const d2=forward(P2,b,n,links,new Array(M).fill(Math.pow(Ptot2/sum(b),1/(1+n))));
+  if(!d2) return {err:['The heat balance did not converge for these inputs. Check the loss exponent n (typically 0.1–0.33).']};
+  const T2=d2.map(d=>s.ambNew+d);
+
+  // wire lengths
+  const V=s.vNew, Ps=new Array(N).fill(0); for(let i=0;i<M;i++) Ps[side[i]]+=P2[i];
+  const L2=new Array(M), q=new Array(N), Lside2=new Array(N);
+  let I2, Rtot2;
+  if(s.newWiring==='series'){
+    Rtot2=V*V/Ptot2; I2=Ptot2/V;
+    for(let i=0;i<M;i++) L2[i]=(Rtot2*P2[i]/Ptot2)/rp[i];
+    for(let si=0;si<N;si++) q[si]=I2*I2*rp[3*si];
+  }else{
+    for(let si=0;si<N;si++){
+      const Ls=V*V/(Ps[si]*rp[3*si]); Lside2[si]=Ls; q[si]=Ps[si]/Ls;
+      for(let j=0;j<3;j++){const i=3*si+j; L2[i]=Ls*P2[i]/Ps[si];}
+    }
+    Rtot2=1/sum(Lside2.map((l,si)=>1/(l*rp[3*si]))); I2=Ptot2/V;
+  }
+  const segs=[];
+  for(let i=0;i<M;i++) segs.push({i,si:side[i],j:i%3,pos:pos[i],area:segA[i],T1:T1[i],P1:P1[i],G:G[i],P2:P2[i],L1:L1[i],L2:L2[i],
+    pitch:segA[i]/(L2[i]*1000),pitch1:segA[i]/(L1[i]*1000),T2:T2[i],Tw:T2[i]+q[side[i]]*rth});
+  const sides=sd.map((x,si)=>{const g=segs.slice(3*si,3*si+3); return {name:x.name||('Side '+(si+1)),color:x.color,length:+x.length,width:+x.width,
+    P1:sum(g.map(v=>v.P1)),P2:sum(g.map(v=>v.P2)),G:sum(g.map(v=>v.G)),L1:sum(g.map(v=>v.L1)),L2:sum(g.map(v=>v.L2)),q:q[si],
+    T1avg:sum(g.map(v=>v.T1*v.area))/sum(g.map(v=>v.area)),T2min:Math.min(...g.map(v=>v.T2)),T2max:Math.max(...g.map(v=>v.T2)),Twmax:Math.max(...g.map(v=>v.Tw))};});
+  return {segs,sides,warn,P1tot,Ptot:Ptot2,Rtot2,I2,L1tot:sum(L1),L2tot:sum(L2),Gtot:sum(G),kt,chkErr,
+    spread1:Math.max(...T1)-Math.min(...T1),spread2:Math.max(...T2)-Math.min(...T2),T2min:Math.min(...T2),T2max:Math.max(...T2)};
+}
+
+// ---------- rendering ----------
 function bandOK(){return Number.isFinite(+S.bandMin)&&Number.isFinite(+S.bandMax)&&S.bandMax>S.bandMin}
 function tClass(t){if(!bandOK()) return ''; return t<S.bandMin?'c-cold':(t>S.bandMax?'c-hot':'c-ok')}
 function tLabel(t){if(!bandOK()) return ''; return t<S.bandMin?'below':(t>S.bandMax?'above':'in band')}
@@ -330,18 +509,21 @@ function renderZones(){
   tb.innerHTML=S.sides.map((x,i)=>`<tr>
     <td><input class="nm" id="nm${i}" data-i="${i}" data-f="name" value="${esc(x.name)}" aria-label="Side name"></td>
     <td><input type="color" id="co${i}" data-i="${i}" data-f="color" value="${esc(x.color||'#888888')}" aria-label="Side colour"></td>
-    <td><input type="number" id="ar${i}" data-i="${i}" data-f="area" step="1" value="${x.area}" aria-label="Area mm²"></td>
-    <td><input type="number" id="rp${i}" data-i="${i}" data-f="rp" step="0.1" value="${x.rp}" aria-label="Wire Ω per m"></td>
-    <td><input type="number" id="ln${i}" data-i="${i}" data-f="len" step="0.001" value="${x.len}" aria-label="Test wire length m"></td>
-    <td><input type="number" id="tp${i}" data-i="${i}" data-f="temp" step="0.1" value="${x.temp}" aria-label="Measured SS °C"></td>
+    <td class="gl"><input type="number" id="ln${i}" data-i="${i}" data-f="length" step="1" value="${x.length}" aria-label="${esc(x.name)} length mm"></td>
+    <td><input type="number" id="wd${i}" data-i="${i}" data-f="width" step="1" value="${x.width}" aria-label="${esc(x.name)} width mm"></td>
+    <td><input type="number" id="rp${i}" data-i="${i}" data-f="rp" step="0.1" value="${x.rp}" aria-label="${esc(x.name)} wire ohm per m"></td>
+    ${[0,1,2].map(j=>`<td class="${j?'':'gl'}"><input type="number" id="w${i}_${j}" data-i="${i}" data-f="wire" data-j="${j}" step="0.001" value="${x.wire[j]}" aria-label="${esc(x.name)} section ${j+1} test wire m"></td>`).join('')}
+    ${[0,1,2].map(j=>`<td class="${j?'':'gl'}"><input type="number" id="t${i}_${j}" data-i="${i}" data-f="T" data-j="${j}" step="0.1" value="${x.T[j]}" aria-label="${esc(x.name)} probe T${j+1} °C"></td>`).join('')}
     <td><button class="x" type="button" data-del="${i}" aria-label="Remove ${esc(x.name)}">✕</button></td></tr>`).join('');
 }
-function syncLenInputs(r){
-  S.sides.forEach((x,i)=>{const el=$('ln'+i); if(!el) return;
-    if(S.testDist==='area'){el.disabled=true; if(r&&r.rows) el.value=r.rows[i].L1.toFixed(3);} else el.disabled=false;});
+function syncWireInputs(r){
+  S.sides.forEach((x,i)=>{for(let j=0;j<3;j++){const el=$(`w${i}_${j}`); if(!el) continue;
+    if(S.testDist==='area'){el.disabled=true; if(r&&r.segs) el.value=r.segs[3*i+j].L1.toFixed(3);} else el.disabled=false;}});
 }
 function renderSetup(){
-  NUM.forEach(id=>$(id).value=S[id]); SEL.forEach(id=>$(id).value=S[id]);
+  NUM.forEach(id=>$(id).value=Number.isFinite(S[id])?S[id]:'');
+  SEL.forEach(id=>$(id).value=S[id]);
+  CHK.forEach(id=>$(id).checked=!!S[id]);
 }
 function vis(){
   $('testTotalRow').hidden=S.testDist!=='area';
@@ -350,136 +532,223 @@ function vis(){
   $('exTag').hidden=!isExample;
 }
 
-function update(){
-  vis();
-  const r=calc(S);
-  syncLenInputs(r);
-  if(r.err){$('errors').textContent=r.err.join(' '); $('tiles').innerHTML=''; $('results').querySelector('tbody').innerHTML=''; $('chart').innerHTML=''; return;}
-  $('errors').textContent=bandOK()?'':'Spec band max must be above spec band min. The band is hidden until fixed.';
-  const inBand=r.T2min>=S.bandMin && r.T2max<=S.bandMax;
-  const cur = S.newWiring==='series' ? `${fmt(r.I2,2)} A` : `${fmt(r.I2,2)} A total`;
-  $('tiles').innerHTML=[
-    ['Total power',`${fmt(r.Ptot,1)} W`,`test ${fmt(r.P1tot,1)} W`],
-    ['Total wire',`${fmt(r.L2tot,3)} m`,`test ${fmt(r.L1tot,3)} m`],
-    [S.newWiring==='series'?'Resistance / current':'Combined R / current',`${fmt(r.Rtot2,1)} Ω`,cur+` at ${fmt(S.vNew,0)} V`],
-    ['Predicted SS',`<span class="${inBand?'c-ok':(r.T2min<S.bandMin?'c-cold':'c-hot')}">${fmt(r.T2min,1)}–${fmt(r.T2max,1)} °C</span>`,`spec ${fmt(S.bandMin,1)}–${fmt(S.bandMax,1)} °C at ${fmt(S.ambNew,1)} °C ambient`],
-    ['Side-to-side spread',`${fmt(r.spread2,1)} K`,`test ${fmt(r.spread1,1)} K`]
-  ].map(t=>`<div class="tile"><div class="k">${t[0]}</div><div class="v">${t[1]}</div><div class="d">${t[2]}</div></div>`).join('');
-
-  const minPitch=2*S.od;
-  $('results').querySelector('tbody').innerHTML=r.rows.map(x=>{
-    const dl=Math.round((x.L2-x.L1)*1000);
-    const pitchFlag = x.pitch<minPitch ? `<small class="c-hot">tighter than 2×OD</small>` : '';
-    const qFlag = x.q>25 ? `<small class="c-warn">high load</small>` : '';
-    const wFlag = x.Tw>180 ? `<small class="c-hot">over 180 °C</small>` : (x.Tw>150?`<small class="c-warn">near limit</small>`:'');
-    return `<tr>
-      <td><span class="sidecell"><span class="sw" style="background:${esc(x.color)}"></span>${esc(x.name)}</span></td>
-      <td>${fmt(x.P1,2)}</td><td>${fmt(x.G,3)}</td><td>${fmt(x.P2,2)}</td>
-      <td><b>${fmt(x.L2*1000,0)}</b></td>
-      <td class="${dl>0?'pos':(dl<0?'neg':'')}">${dl>0?'+':''}${fmt(dl,0)}<small>${x.L1>0?(dl>0?'+':'')+fmt((x.L2-x.L1)*100/x.L1,1)+' %':''}</small></td>
-      <td>${fmt(x.q,1)}${qFlag}</td><td>${fmt(x.pitch,1)}${pitchFlag}</td>
-      <td class="${tClass(x.T2)}">${fmt(x.T2,1)}<small>${tLabel(x.T2)}</small></td>
-      <td>${fmt(x.Tw,0)}${wFlag}</td></tr>`;}).join('');
-  drawChart(r);
-  window.__last=r;
+// colour scale (blue → yellow → red)
+const STOPS=[[0,[49,54,149]],[.2,[69,117,180]],[.4,[116,173,209]],[.55,[224,243,248]],[.7,[254,224,144]],[.85,[244,109,67]],[1,[165,0,38]]];
+let scaleLo=20, scaleHi=40;
+function colorAt(t){
+  let f=(t-scaleLo)/(scaleHi-scaleLo); f=Math.max(0,Math.min(1,f));
+  for(let k=1;k<STOPS.length;k++){if(f<=STOPS[k][0]){const [a,ca]=STOPS[k-1],[bb,cb]=STOPS[k],u=(f-a)/(bb-a);
+    return `rgb(${ca.map((c,m)=>Math.round(c+(cb[m]-c)*u)).join(',')})`;}}
+  return 'rgb(165,0,38)';
 }
-
-function drawChart(r){
-  const svg=$('chart'), rows=r.rows, W=640, padL=92, padR=24, rowH=40, top=26, H=top+rows.length*rowH+12;
-  const bOK=bandOK();
-  const vals=rows.flatMap(x=>[x.T1,x.T2]).concat(bOK?[S.bandMin,S.bandMax]:[]);
-  let lo=Math.floor(Math.min(...vals)-1), hi=Math.ceil(Math.max(...vals)+1);
-  if(hi-lo<4){hi=lo+4}
-  const X=t=>padL+(t-lo)/(hi-lo)*(W-padL-padR);
-  const step=(hi-lo)>14?2:1;
-  let g='';
-  if(bOK){g+=`<rect class="band" x="${X(S.bandMin)}" y="${top-6}" width="${Math.max(0,X(S.bandMax)-X(S.bandMin))}" height="${rows.length*rowH+6}"/>`;
-  g+=`<line class="bandedge" x1="${X(S.bandMin)}" x2="${X(S.bandMin)}" y1="${top-6}" y2="${top+rows.length*rowH}"/><line class="bandedge" x1="${X(S.bandMax)}" x2="${X(S.bandMax)}" y1="${top-6}" y2="${top+rows.length*rowH}"/>`;}
-  for(let t=lo;t<=hi;t+=step){g+=`<line class="grid" x1="${X(t)}" x2="${X(t)}" y1="${top-6}" y2="${top+rows.length*rowH}" opacity=".6"/><text x="${X(t)}" y="${top-12}" text-anchor="middle">${t}</text>`;}
-  rows.forEach((x,i)=>{
-    const y=top+i*rowH+rowH/2;
-    g+=`<rect x="8" y="${y-6}" width="12" height="12" rx="2" fill="${esc(x.color)}" stroke="var(--line)"/>`;
-    g+=`<text class="lbl" x="26" y="${y+4}">${esc(x.name)}</text>`;
-    const x1=X(x.T1), x2=X(x.T2);
-    if(Math.abs(x2-x1)>12){const dir=x2>x1?1:-1; g+=`<path class="arrow" d="M${x1+dir*7} ${y} L${x2-dir*9} ${y} M${x2-dir*14} ${y-4} L${x2-dir*9} ${y} L${x2-dir*14} ${y+4}"/>`;}
-    g+=`<circle cx="${x1}" cy="${y}" r="5.5" fill="var(--panel)" stroke="var(--muted)" stroke-width="2"/>`;
-    const cls=tClass(x.T2)==='c-ok'?'var(--ok)':(tClass(x.T2)==='c-cold'?'var(--cold)':'var(--hot)');
-    g+=`<circle cx="${x2}" cy="${y}" r="6" fill="${cls}"/>`;
+function geometry(sd){
+  const N=sd.length, bands=[];
+  if(N===4){
+    const [top,right,bottom,left]=sd.map(x=>({L:+x.length,W:+x.width}));
+    const H=Math.max(left.L,top.W+right.L), xR=left.W+top.L-right.W;
+    bands.push({x:left.W,y:0,w:top.L,h:top.W,dir:'r'});
+    bands.push({x:xR,y:top.W,w:right.W,h:right.L,dir:'d'});
+    bands.push({x:xR-bottom.L,y:H-bottom.W,w:bottom.L,h:bottom.W,dir:'l'});
+    bands.push({x:0,y:0,w:left.W,h:left.L,dir:'u'});
+  }else{
+    let x=0; const gap=Math.max(30,...sd.map(s=>+s.width))*0.6;
+    sd.forEach(s=>{bands.push({x,y:0,w:+s.length,h:+s.width,dir:'r'}); x+=(+s.length)+gap;});
+  }
+  const minX=Math.min(...bands.map(b=>b.x)),minY=Math.min(...bands.map(b=>b.y)),maxX=Math.max(...bands.map(b=>b.x+b.w)),maxY=Math.max(...bands.map(b=>b.y+b.h));
+  return {bands,minX,minY,maxX,maxY,frame:N===4};
+}
+function uv(b,u,v){ // u along the side from its start, v across
+  switch(b.dir){case 'r':return [b.x+u,b.y+v]; case 'd':return [b.x+v,b.y+u]; case 'l':return [b.x+b.w-u,b.y+v]; default:return [b.x+v,b.y+b.h-u];}
+}
+function drawMap(svg,temps,wire,id){
+  const sd=S.sides, N=sd.length, g=geometry(sd), ring=S.ring==='yes'&&N>=3;
+  const span=Math.max(g.maxX-g.minX,g.maxY-g.minY), fs=span*0.032, m=fs*4.2;
+  const vb=[g.minX-m,g.minY-m,(g.maxX-g.minX)+2*m,(g.maxY-g.minY)+2*m];
+  let defs='', body='';
+  g.bands.forEach((b,si)=>{
+    const L=+sd[si].length, W=+sd[si].width;
+    const a=temps[3*si],c2=temps[3*si+1],c=temps[3*si+2];
+    const pv=(si-1+N)%N, nx=(si+1)%N;
+    const t0=ring?(a+temps[3*pv+2])/2:a, t4=ring?(c+temps[3*nx])/2:c;
+    const v={r:'x1="0" y1="0" x2="1" y2="0"',d:'x1="0" y1="0" x2="0" y2="1"',l:'x1="1" y1="0" x2="0" y2="0"',u:'x1="0" y1="1" x2="0" y2="0"'}[b.dir];
+    defs+=`<linearGradient id="${id}g${si}" ${v}>`+[[0,t0],[1/6,a],[.5,c2],[5/6,c],[1,t4]].map(([o,t])=>`<stop offset="${o}" stop-color="${colorAt(t)}"/>`).join('')+`</linearGradient>`;
+    body+=`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="url(#${id}g${si})"/>`;
+    // section dividers
+    for(let j=1;j<3;j++){const [x1,y1]=uv(b,j*L/3,0),[x2,y2]=uv(b,j*L/3,W); body+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#ffffff" stroke-opacity=".55" stroke-width="${span*0.002}" stroke-dasharray="${span*0.006} ${span*0.006}"/>`;}
+    // wire serpentine
+    if(S.showWire && wire){
+      const pts=[]; const e=Math.min(W*0.08,span*0.008);
+      for(let j=0;j<3;j++){
+        const Lmm=wire[3*si+j]*1000; const runs=Math.max(1,Math.min(400,Math.round(Lmm/W))); const step=(L/3)/runs;
+        for(let k=0;k<runs;k++) pts.push(j*L/3+step*(k+0.5));
+      }
+      let dpath='';
+      pts.forEach((u,k)=>{const lo=k%2?W-e:e, hi=k%2?e:W-e; const [x1,y1]=uv(b,u,lo),[x2,y2]=uv(b,u,hi); dpath+=(k?'L':'M')+x1.toFixed(1)+' '+y1.toFixed(1)+'L'+x2.toFixed(1)+' '+y2.toFixed(1);});
+      body+=`<path class="wire" d="${dpath}" stroke-width="${span*0.0028}"/>`;
+    }
+    body+=`<rect class="edge" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" stroke-width="${span*0.002}"/>`;
+    // name label inside the frame opening
+    const [nx0,ny0]=uv(b,L/2,0);
+    let lx,ly,anc='middle';
+    if(!g.frame){[lx,ly]=uv(b,L/2,W); ly+=fs*1.3;}
+    else if(b.dir==='r'){lx=nx0; ly=b.y+b.h+fs*1.4;}
+    else if(b.dir==='d'){lx=b.x-fs*0.6; ly=b.y+b.h/2+fs*0.35; anc='end';}
+    else if(b.dir==='l'){lx=nx0; ly=b.y-fs*0.7;}
+    else {lx=b.x+b.w+fs*0.6; ly=b.y+b.h/2+fs*0.35; anc='start';}
+    body+=`<text class="nm" x="${lx}" y="${ly}" font-size="${fs*0.95}" text-anchor="${anc}">${esc(sd[si].name)}</text>`;
+    // probes
+    for(let j=0;j<3;j++){
+      const u=(j+0.5)*L/3, [px,py]=uv(b,u,W/2), t=temps[3*si+j];
+      body+=`<circle class="probe" cx="${px}" cy="${py}" r="${fs*0.32}" stroke-width="${span*0.0025}"/>`;
+      if(S.showProbes){
+        let tx,ty,ta='middle';
+        if(!g.frame||b.dir==='r'){[tx,ty]=uv(b,u,0); ty-=fs*0.55; if(!g.frame) ty=b.y-fs*0.55;}
+        else if(b.dir==='d'){[tx,ty]=uv(b,u,W); tx+=fs*0.45; ty+=fs*0.35; ta='start';}
+        else if(b.dir==='l'){[tx,ty]=uv(b,u,W); ty+=fs*1.15;}
+        else {[tx,ty]=uv(b,u,0); tx-=fs*0.45; ty+=fs*0.35; ta='end';}
+        body+=`<text x="${tx}" y="${ty}" font-size="${fs}" text-anchor="${ta}">${fmt(t,1)}</text>`;
+      }
+    }
   });
-  g+=`<text x="${W-padR}" y="${H-2}" text-anchor="end">°C</text>`;
-  svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.setAttribute('width','100%'); svg.style.minWidth='420px'; svg.style.display='block';
+  svg.setAttribute('viewBox',vb.map(v=>v.toFixed(1)).join(' '));
+  svg.innerHTML=`<defs>${defs}</defs>${body}`;
+}
+function drawScale(){
+  const svg=$('scale'), x0=20, x1=620, y=8, h=14;
+  const X=t=>x0+(t-scaleLo)/(scaleHi-scaleLo)*(x1-x0);
+  let stops=STOPS.map(([o,c])=>`<stop offset="${o}" stop-color="rgb(${c.join(',')})"/>`).join('');
+  let g=`<defs><linearGradient id="scg" x1="0" y1="0" x2="1" y2="0">${stops}</linearGradient></defs><rect x="${x0}" y="${y}" width="${x1-x0}" height="${h}" fill="url(#scg)" rx="2"/>`;
+  const span=scaleHi-scaleLo, step=span>16?4:span>8?2:span>4?1:0.5;
+  for(let t=Math.ceil(scaleLo/step)*step;t<=scaleHi+1e-9;t+=step){g+=`<line x1="${X(t)}" x2="${X(t)}" y1="${y+h}" y2="${y+h+4}" stroke="var(--muted)"/><text x="${X(t)}" y="${y+h+16}" text-anchor="middle">${fmt(t,step<1?1:0)}</text>`;}
+  if(bandOK()){[S.bandMin,S.bandMax].forEach(t=>{if(t>=scaleLo&&t<=scaleHi) g+=`<line x1="${X(t)}" x2="${X(t)}" y1="${y-4}" y2="${y+h+2}" stroke="var(--ink)" stroke-width="2"/>`;});
+    g+=`<text x="${x1}" y="${y+h+30}" text-anchor="end">°C · black ticks = spec band</text>`;} else g+=`<text x="${x1}" y="${y+h+30}" text-anchor="end">°C</text>`;
   svg.innerHTML=g;
 }
 
-// events
+function update(){
+  vis();
+  const r=calc(S);
+  syncWireInputs(r);
+  const bandMsg=bandOK()?'':'Spec band max must be above spec band min. The band is hidden until fixed.';
+  if(r.err){$('errors').textContent=r.err.join(' '); $('warns').textContent=''; $('tiles').innerHTML=''; $('results').querySelector('tbody').innerHTML='';
+    $('mapTest').innerHTML=''; $('mapNew').innerHTML=''; $('scale').innerHTML=''; window.__last=null; return;}
+  $('errors').textContent=bandMsg;
+  $('warns').textContent=r.warn.join(' ');
+  const inBand=bandOK()&&r.T2min>=S.bandMin&&r.T2max<=S.bandMax;
+  const prCls=bandOK()?(inBand?'c-ok':(r.T2min<S.bandMin?'c-cold':'c-hot')):'';
+  $('tiles').innerHTML=[
+    ['Total power',`${fmt(r.Ptot,1)} W`,`test ${fmt(r.P1tot,1)} W`],
+    ['Total wire',`${fmt(r.L2tot,3)} m`,`test ${fmt(r.L1tot,3)} m`],
+    [S.newWiring==='series'?'Resistance / current':'Combined R / current',`${fmt(r.Rtot2,1)} Ω`,`${fmt(r.I2,2)} A${S.newWiring==='series'?'':' total'} at ${fmt(S.vNew,0)} V`],
+    ['Predicted SS',`<span class="${prCls}">${fmt(r.T2min,1)}–${fmt(r.T2max,1)} °C</span>`,bandOK()?`spec ${fmt(S.bandMin,1)}–${fmt(S.bandMax,1)} °C at ${fmt(S.ambNew,1)} °C ambient`:`at ${fmt(S.ambNew,1)} °C ambient`],
+    ['Probe spread',`${fmt(r.spread2,2)} K`,`test ${fmt(r.spread1,1)} K over ${r.segs.length} probes`]
+  ].map(t=>`<div class="tile"><div class="k">${t[0]}</div><div class="v">${t[1]}</div><div class="d">${t[2]}</div></div>`).join('');
+
+  const minPitch=2*S.od;
+  const chg=(a,b)=>{const d=Math.round((b-a)*1000); return `<span class="${d>0?'pos':(d<0?'neg':'')}">${d>0?'+':''}${fmt(d,0)}</span><small>${a>0?((b-a)>=0?'+':'')+fmt((b-a)*100/a,1)+' %':''}</small>`;};
+  let rows='';
+  r.sides.forEach((x,si)=>{
+    const qFlag=x.q>25?`<small class="c-warn">high load</small>`:'';
+    const wFlag=x.Twmax>180?`<small class="c-hot">over 180 °C</small>`:(x.Twmax>150?`<small class="c-warn">near limit</small>`:'');
+    rows+=`<tr class="side-row"><td><span class="sidecell"><span class="sw" style="background:${esc(x.color)}"></span>${esc(x.name)}</span></td>
+      <td>${fmt(x.length,0)}<small>length</small></td><td>${fmt(x.T1avg,1)}<small>avg</small></td><td>${fmt(x.P1,2)}</td><td>${fmt(x.G,3)}</td><td>${fmt(x.P2,2)}</td>
+      <td><b>${fmt(x.L2*1000,0)}</b></td><td>${chg(x.L1,x.L2)}</td><td>${fmt(x.q,1)}${qFlag}</td><td>—</td>
+      <td class="${tClass(x.T2min)}">${fmt(x.T2min,1)}–${fmt(x.T2max,1)}</td><td>${fmt(x.Twmax,0)}${wFlag}</td></tr>`;
+    r.segs.slice(3*si,3*si+3).forEach(sg=>{
+      const pFlag=sg.pitch<minPitch?`<small class="c-hot">tighter than 2×OD</small>`:'';
+      rows+=`<tr class="seg-row"><td>Section ${sg.j+1}</td><td>${fmt(sg.pos,0)}</td><td>${fmt(sg.T1,1)}</td><td>${fmt(sg.P1,2)}</td><td>${fmt(sg.G,3)}</td>
+        <td>${fmt(sg.P2,2)}</td><td>${fmt(sg.L2*1000,0)}</td><td>${chg(sg.L1,sg.L2)}</td><td></td><td>${fmt(sg.pitch,1)}${pFlag}</td>
+        <td class="${tClass(sg.T2)}">${fmt(sg.T2,1)}<small>${tLabel(sg.T2)}</small></td><td>${fmt(sg.Tw,0)}</td></tr>`;
+    });
+  });
+  $('results').querySelector('tbody').innerHTML=rows;
+
+  // maps
+  const all=r.segs.flatMap(sg=>[sg.T1,sg.T2]);
+  let lo=Math.min(...all), hi=Math.max(...all);
+  if(hi-lo<2){const c=(hi+lo)/2; lo=c-1; hi=c+1;}
+  const pad=(hi-lo)*0.05; scaleLo=Math.floor((lo-pad)*2)/2; scaleHi=Math.ceil((hi+pad)*2)/2;
+  drawMap($('mapTest'),r.segs.map(sg=>sg.T1),r.segs.map(sg=>sg.L1),'mt');
+  drawMap($('mapNew'),r.segs.map(sg=>sg.T2),r.segs.map(sg=>sg.L2),'mn');
+  $('capTest').textContent=`${fmt(r.P1tot,1)} W · spread ${fmt(r.spread1,1)} K`;
+  $('capNew').textContent=`${fmt(r.Ptot,1)} W · spread ${fmt(r.spread2,2)} K`;
+  drawScale();
+  window.__last=r;
+}
+
+// ---------- events ----------
+function markEdited(){isExample=false;}
 NUM.forEach(id=>$(id).addEventListener('input',e=>{S[id]=parseFloat(e.target.value); markEdited(); save(); update();}));
 SEL.forEach(id=>$(id).addEventListener('change',e=>{
-  if(id==='testDist' && e.target.value==='manual'){const r=calc(S); if(r.rows) S.sides.forEach((x,i)=>x.len=+r.rows[i].L1.toFixed(3));}
+  if(id==='testDist'&&e.target.value==='manual'){const r=calc(S); if(r.segs) S.sides.forEach((x,i)=>{x.wire=[0,1,2].map(j=>+r.segs[3*i+j].L1.toFixed(3));});}
   S[id]=e.target.value; markEdited(); save(); update();}));
+CHK.forEach(id=>$(id).addEventListener('change',e=>{S[id]=e.target.checked; save(); update();}));
 $('zones').addEventListener('input',e=>{
   const el=e.target, i=+el.dataset.i, f=el.dataset.f; if(!f) return;
-  S.sides[i][f]=(f==='name'||f==='color')?el.value:parseFloat(el.value);
+  if(f==='wire'||f==='T') S.sides[i][f][+el.dataset.j]=parseFloat(el.value);
+  else S.sides[i][f]=(f==='name'||f==='color')?el.value:parseFloat(el.value);
   markEdited(); save(); update();
 });
-$('zones').addEventListener('click',e=>{
-  const b=e.target.closest('[data-del]'); if(!b) return;
-  S.sides.splice(+b.dataset.del,1); markEdited(); save(); renderZones(); update();
-});
+$('zones').addEventListener('click',e=>{const b=e.target.closest('[data-del]'); if(!b) return; S.sides.splice(+b.dataset.del,1); markEdited(); save(); renderZones(); update();});
 $('add').addEventListener('click',()=>{
-  const last=S.sides[S.sides.length-1]||{area:25000,rp:8,len:1.5,temp:35};
-  S.sides.push({name:'Side '+(S.sides.length+1),color:'#7a8699',area:last.area,rp:last.rp,len:last.len,temp:last.temp});
+  const last=S.sides[S.sides.length-1]||{length:400,width:60,rp:8,wire:[0.5,0.5,0.5],T:[35,35,35]};
+  S.sides.push({name:'Side '+(S.sides.length+1),color:'#7a8699',length:last.length,width:last.width,rp:last.rp,wire:last.wire.slice(),T:last.T.slice()});
   markEdited(); save(); renderZones(); update();
 });
 $('reset').addEventListener('click',()=>{S=clone(EXAMPLE); isExample=true; save(); renderSetup(); renderZones(); update();});
-function markEdited(){isExample=false;}
-
+$('nextRound').addEventListener('click',()=>{
+  const r=window.__last; if(!r||!r.segs) return;
+  S.sides.forEach((x,i)=>{x.wire=[0,1,2].map(j=>+r.segs[3*i+j].L2.toFixed(3));});
+  S.testDist='manual'; S.testWiring=S.newWiring; S.vTest=S.vNew; markEdited(); save(); renderSetup(); renderZones(); update();
+  $('nextMsg').textContent='Next round set up. Enter the new probe readings and the room temperature from that test.'; $('nextMsg').className='note ok-t';
+});
 $('copy').addEventListener('click',()=>{
-  const r=window.__last; const b=$('copy');
-  if(!r||!r.rows){b.textContent='Fix the inputs first'; setTimeout(()=>b.textContent='Copy results for Sheets',1600); return;}
-  const head=['Side','Area (mm2)','Wire (ohm/m)','Test length (m)','Measured SS (C)','Test power (W)','Heat loss (W/K)','New power (W)','New length (mm)','Change (mm)','Wire load (W/m)','Pitch (mm)','Predicted SS (C)','Wire est (C)'];
-  const lines=[head.join('\t')].concat(r.rows.map((x,i)=>[x.name,S.sides[i].area,S.sides[i].rp,x.L1.toFixed(3),x.T1,x.P1.toFixed(2),x.G.toFixed(4),x.P2.toFixed(2),(x.L2*1000).toFixed(0),((x.L2-x.L1)*1000).toFixed(0),x.q.toFixed(2),x.pitch.toFixed(1),x.T2.toFixed(1),x.Tw.toFixed(0)].join('\t')));
-  lines.push(['Total',sum(S.sides.map(x=>+x.area)),'',r.L1tot.toFixed(3),'',r.P1tot.toFixed(2),r.Gtot.toFixed(4),r.Ptot.toFixed(2),(r.L2tot*1000).toFixed(0),((r.L2tot-r.L1tot)*1000).toFixed(0)].join('\t'));
+  const r=window.__last, b=$('copy');
+  const reset=()=>setTimeout(()=>b.textContent='Copy results for Sheets',1600);
+  if(!r||!r.segs){b.textContent='Fix the inputs first'; reset(); return;}
+  const head=['Side','Section','Probe at (mm)','Area (mm2)','Wire (ohm/m)','Test wire (m)','Measured SS (C)','Test power (W)','Heat loss (W/K)','New power (W)','New wire (mm)','Change (mm)','Wire load (W/m)','Pitch (mm)','Predicted SS (C)','Wire est (C)'];
+  const lines=[head.join('\t')];
+  r.sides.forEach((x,si)=>{
+    r.segs.slice(3*si,3*si+3).forEach(sg=>lines.push([x.name,sg.j+1,sg.pos.toFixed(0),sg.area.toFixed(0),S.sides[si].rp,sg.L1.toFixed(3),sg.T1,sg.P1.toFixed(2),sg.G.toFixed(4),sg.P2.toFixed(2),(sg.L2*1000).toFixed(0),((sg.L2-sg.L1)*1000).toFixed(0),x.q.toFixed(2),sg.pitch.toFixed(1),sg.T2.toFixed(2),sg.Tw.toFixed(0)].join('\t')));
+    lines.push([x.name+' total','','',(x.length*x.width).toFixed(0),S.sides[si].rp,x.L1.toFixed(3),x.T1avg.toFixed(2),x.P1.toFixed(2),x.G.toFixed(4),x.P2.toFixed(2),(x.L2*1000).toFixed(0),((x.L2-x.L1)*1000).toFixed(0),x.q.toFixed(2),'',x.T2min.toFixed(2)+'-'+x.T2max.toFixed(2),x.Twmax.toFixed(0)].join('\t'));
+  });
+  lines.push(['Total','','',sum(r.sides.map(x=>x.length*x.width)).toFixed(0),'',r.L1tot.toFixed(3),'',r.P1tot.toFixed(2),r.Gtot.toFixed(4),r.Ptot.toFixed(2),(r.L2tot*1000).toFixed(0),((r.L2tot-r.L1tot)*1000).toFixed(0)].join('\t'));
   const txt=lines.join('\n');
-  const done=()=>{b.textContent='Copied'; setTimeout(()=>b.textContent='Copy results for Sheets',1600);};
-  const fallback=()=>{const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); let ok=false; try{ok=document.execCommand('copy')}catch(e){} ta.remove(); if(ok) done(); else {b.textContent='Copy blocked here';setTimeout(()=>b.textContent='Copy results for Sheets',1600);}};
+  const done=()=>{b.textContent='Copied'; reset();};
+  const fallback=()=>{const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); let ok=false; try{ok=document.execCommand('copy')}catch(e){} ta.remove(); if(ok) done(); else {b.textContent='Copy blocked here'; reset();}};
   try{navigator.clipboard.writeText(txt).then(done,fallback);}catch(e){fallback();}
 });
 
-// ---- workspaces ----
-const WSKEY='wire-heater-balancer-workspaces-v1';
+// ---------- workspaces ----------
 const wsList=$('wsList'), wsName=$('wsName'), wsMsg=$('wsMsg');
 function wsAll(){try{const o=JSON.parse(localStorage.getItem(WSKEY)||'{}'); return (o&&typeof o==='object')?o:{};}catch(e){return {};}}
 function wsPut(o){try{localStorage.setItem(WSKEY,JSON.stringify(o)); return true;}catch(e){return false;}}
 function msg(t,cls){wsMsg.textContent=t; wsMsg.className='note'+(cls?' '+cls:'');}
 function when(iso){const d=new Date(iso); return isNaN(d)?'':d.toLocaleString(undefined,{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});}
+let delArmed=false;
+function resetDel(){delArmed=false; $('wsDel').textContent='Delete';}
 function wsRender(select){
   const all=wsAll(); const names=Object.keys(all).sort((a,b)=>String(all[b].savedAt||'').localeCompare(String(all[a].savedAt||'')));
   wsList.innerHTML=names.length?names.map(n=>`<option value="${esc(n)}">${esc(n)}${all[n].savedAt?' · '+esc(when(all[n].savedAt)):''}</option>`).join(''):'<option value="">No saved workspaces yet</option>';
   if(select&&all[select]) wsList.value=select;
   $('wsLoad').disabled=$('wsDel').disabled=!names.length; resetDel();
 }
-function packWorkspace(name){return {app:'wire-heater-zone-balancer',version:1,name:name||'',savedAt:new Date().toISOString(),state:clone(S)};}
+function packWorkspace(name){return {app:'wire-heater-zone-balancer',version:2,name:name||'',savedAt:new Date().toISOString(),state:clone(S)};}
 function applyWorkspace(obj){
   const st=obj&&obj.state?obj.state:obj;
   if(!st||!Array.isArray(st.sides)||!st.sides.length) throw new Error('This file has no zone data.');
-  const merged=Object.assign(clone(EXAMPLE),clone(st));
-  NUM.forEach(id=>{merged[id]=parseFloat(merged[id]);});
-  merged.sides=st.sides.map((x,i)=>({name:String(x&&x.name!=null?x.name:'Side '+(i+1)),color:(x&&/^#[0-9a-f]{6}$/i.test(x.color))?x.color:'#7a8699',area:parseFloat(x&&x.area),rp:parseFloat(x&&x.rp),len:parseFloat(x&&x.len),temp:parseFloat(x&&x.temp)}));
-  SEL.forEach(id=>{const opts=[...$(id).options].map(o=>o.value); if(!opts.includes(merged[id])) merged[id]=EXAMPLE[id];});
-  S=merged; isExample=false; save(); renderSetup(); renderZones(); update();
+  S=migrate(st); isExample=false; save(); renderSetup(); renderZones(); update();
 }
 $('wsSave').addEventListener('click',()=>{
-  const name=wsName.value.trim(); if(!name){msg('Enter a name, then save.','bad'); wsName.focus(); return;}
+  const name=wsName.value.trim(); if(!name){msg('Enter a name, then save.','bad-t'); wsName.focus(); return;}
   const all=wsAll(); const existed=!!all[name]; all[name]=packWorkspace(name);
-  if(wsPut(all)){wsRender(name); msg(existed?`Updated “${name}”.`:`Saved “${name}”.`,'ok');}
-  else msg('This browser blocked saving. Use Export file instead.','bad');
+  if(wsPut(all)){wsRender(name); msg(existed?`Updated “${name}”.`:`Saved “${name}”.`,'ok-t');}
+  else msg('This browser blocked saving. Use Export file instead.','bad-t');
 });
 $('wsLoad').addEventListener('click',()=>{
-  const name=wsList.value; const all=wsAll(); if(!name||!all[name]) return;
-  try{applyWorkspace(all[name]); wsName.value=name; msg(`Loaded “${name}”.`,'ok');}catch(e){msg(e.message,'bad');}
+  const name=wsList.value, all=wsAll(); if(!name||!all[name]) return;
+  try{applyWorkspace(all[name]); wsName.value=name; msg(`Loaded “${name}”.`,'ok-t');}catch(e){msg(e.message,'bad-t');}
 });
-let delArmed=false;
-function resetDel(){delArmed=false; $('wsDel').textContent='Delete';}
 $('wsList').addEventListener('change',resetDel);
 $('wsDel').addEventListener('click',()=>{
   const name=wsList.value; if(!name) return;
@@ -493,24 +762,24 @@ $('wsExport').addEventListener('click',()=>{
     const blob=new Blob([JSON.stringify(packWorkspace(name),null,2)],{type:'application/json'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=file; document.body.appendChild(a); a.click();
     setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500);
-    msg(`Exported ${file}.`,'ok');
-  }catch(e){msg('This browser blocked the download.','bad');}
+    msg(`Exported ${file}.`,'ok-t');
+  }catch(e){msg('This browser blocked the download.','bad-t');}
 });
 $('wsImportBtn').addEventListener('click',()=>$('wsImport').click());
 $('wsImport').addEventListener('change',e=>{
   const f=e.target.files&&e.target.files[0]; if(!f) return;
   const rd=new FileReader();
   rd.onload=()=>{
-    try{const obj=JSON.parse(rd.result); applyWorkspace(obj); wsName.value=(obj&&obj.name)||f.name.replace(/\.json$/i,''); msg(`Imported ${f.name}. Click Save to keep it in this browser.`,'ok');}
-    catch(err){msg(err instanceof SyntaxError?`${f.name} is not a valid workspace file.`:err.message,'bad');}
+    try{const obj=JSON.parse(rd.result); applyWorkspace(obj); wsName.value=(obj&&obj.name)||f.name.replace(/\.json$/i,''); msg(`Imported ${f.name}. Click Save to keep it in this browser.`,'ok-t');}
+    catch(err){msg(err instanceof SyntaxError?`${f.name} is not a valid workspace file.`:err.message,'bad-t');}
     e.target.value='';
   };
-  rd.onerror=()=>{msg(`Could not read ${f.name}.`,'bad'); e.target.value='';};
+  rd.onerror=()=>{msg(`Could not read ${f.name}.`,'bad-t'); e.target.value='';};
   rd.readAsText(f);
 });
 
 renderSetup(); renderZones(); update(); wsRender();
-window.__calc=calc; window.__EX=EXAMPLE;
+window.__calc=calc; window.__EX=EXAMPLE; window.__migrate=migrate;
 })();
 </script>
 </body>
