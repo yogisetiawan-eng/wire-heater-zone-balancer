@@ -249,7 +249,7 @@ figcaption select{width:auto;font-weight:700;font-size:.88rem;padding:2px 6px}
       <section class="panel">
         <h2>Heat distribution</h2>
         <div class="maps">
-          <figure><figcaption><span class="cap-l"><select id="leftMap" aria-label="Left map shows"><option value="measured">Measured</option><option value="estimated">Estimated</option></select>· test layout</span> <span id="capTest"></span></figcaption><svg class="map" id="mapTest" role="img" aria-label="Measured temperature map with test wire layout"></svg></figure>
+          <figure><figcaption><span class="cap-l"><select id="leftMap" aria-label="Left map shows"><option value="measured">Measured</option><option value="estimated">Physics estimate</option></select>· test layout</span> <span id="capTest"></span></figcaption><svg class="map" id="mapTest" role="img" aria-label="Measured temperature map with test wire layout"></svg></figure>
           <figure><figcaption>Predicted · new layout <span id="capNew"></span></figcaption><svg class="map" id="mapNew" role="img" aria-label="Predicted temperature map with new wire layout"></svg></figure>
         </div>
         <svg id="scale" viewBox="0 0 640 60" role="img" aria-label="Temperature colour scale"></svg>
@@ -732,8 +732,16 @@ function renderSteps(E,r){
   }else s2+=`<div class="d">${have?'Enter the remaining readings.':'Run test 1 at full power and enter T1–T3 per side.'}</div>`;
   s2+='</div>';
   let s3=`<div class="step ${r&&r.segs?'done':'wait'}"><div class="n">3 · Adjust layout</div>`;
-  s3+=r&&r.segs?`<div class="t">${fmt(r.T2min,1)}–${fmt(r.T2max,1)} °C</div><div class="d">${fmt(r.Ptot,1)} W · ${fmt(r.I2,2)} A · ${fmt(r.L2tot,3)} m wire · spread ${fmt(r.spread2,2)} K</div>`
-              :`<div class="t">—</div><div class="d">Waiting for the measured readings.</div>`;
+  if(r&&r.segs){
+    const maxRel=Math.max(...r.segs.map(g=>Math.abs(g.L2-g.L1)/g.L1));
+    const wiringChanged=S.newWiring!==S.testWiring||Math.abs(S.vNew-S.vTest)>1e-9;
+    let why='';
+    if(r.spread1<0.3&&maxRel<0.01) why='<b>Already balanced:</b> keep the test layout. ';
+    else if(r.spread1<0.3&&wiringChanged) why='<b>Already balanced.</b> Lengths change only because the new wiring or supply voltage differs from the test. ';
+    else if(r.spread1<0.3) why='<b>Already balanced.</b> Lengths change only because the total power differs from the test. ';
+    const ambNote=Math.abs(S.ambNew-S.roomTest)>0.05?` Predicted at ${fmt(S.ambNew,1)} °C ambient; the test room was ${fmt(S.roomTest,1)} °C.`:'';
+    s3+=`<div class="t">${fmt(r.T2min,1)}–${fmt(r.T2max,1)} °C</div><div class="d">${why}${fmt(r.Ptot,1)} W · ${fmt(r.I2,2)} A · ${fmt(r.L2tot,3)} m wire · spread ${fmt(r.spread2,2)} K.${ambNote}</div>`;
+  }else s3+=`<div class="t">—</div><div class="d">Waiting for the measured readings.</div>`;
   s3+='</div>';
   $('steps').innerHTML=s1+s2+s3;
 }
