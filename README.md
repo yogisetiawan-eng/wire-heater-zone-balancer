@@ -6,6 +6,14 @@ A single-page tool for balancing a silicone wire heater on a frame or flange. Yo
 
 It runs entirely in the browser. There is no install, no server and no data upload.
 
+## Workflow
+
+1. **Estimate test 1.** Before you build anything, the app estimates every probe temperature from physics: natural convection on a vertical surface (Churchill–Chu), radiation with your surface emissivity, front face only or both faces, plus heat sharing through the plate. An extra loss factor covers mounts and attached panels.
+2. **Measure actual.** Run the test at full power and enter T1–T3 per side. The estimate is shown under each reading, and the step card reports the average difference and the extra loss factor that would make the estimate match.
+3. **Adjust.** The new layout is tuned on the measured readings.
+
+**Fill readings with estimate** lets you design a first layout from the estimate alone, before any test. **Clear readings** empties the probe inputs for a new test.
+
 ## Inputs
 
 - **Test run:** supply voltage, room temperature, wiring (one series string or one string per side), and wire distribution (even by area, or the wire length you laid in each section).
