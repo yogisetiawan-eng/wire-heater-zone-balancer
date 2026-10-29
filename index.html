@@ -214,6 +214,7 @@ figcaption span{font-weight:400;color:var(--muted);font-family:var(--f-mono);fon
         </div>
         <div class="row-actions">
           <button id="add" type="button">Add side</button>
+          <button id="delSide" type="button">Delete side</button>
           <button id="reset" type="button">Reset to example</button>
         </div>
         <p class="note" style="margin-top:10px">List the sides clockwise from the top. Each side is split into three equal sections; put probe T1, T2 and T3 at 1/6, 1/2 and 5/6 of its length, measured clockwise (top: left → right, right: top → bottom, bottom: right → left, left: bottom → top). Read at steady state, ≥ 1 h, with the heater full-on.</p>
@@ -514,8 +515,12 @@ function renderZones(){
     <td><input type="number" id="rp${i}" data-i="${i}" data-f="rp" step="0.1" value="${x.rp}" aria-label="${esc(x.name)} wire ohm per m"></td>
     ${[0,1,2].map(j=>`<td class="${j?'':'gl'}"><input type="number" id="w${i}_${j}" data-i="${i}" data-f="wire" data-j="${j}" step="0.001" value="${x.wire[j]}" aria-label="${esc(x.name)} section ${j+1} test wire m"></td>`).join('')}
     ${[0,1,2].map(j=>`<td class="${j?'':'gl'}"><input type="number" id="t${i}_${j}" data-i="${i}" data-f="T" data-j="${j}" step="0.1" value="${x.T[j]}" aria-label="${esc(x.name)} probe T${j+1} °C"></td>`).join('')}
-    <td><button class="x" type="button" data-del="${i}" aria-label="Remove ${esc(x.name)}">✕</button></td></tr>`).join('');
+    <td><button class="x" type="button" data-del="${i}" title="Delete ${esc(x.name)}" aria-label="Delete ${esc(x.name)}">✕</button></td></tr>`).join('');
+  resetDelSide();
 }
+let delSideArmed=false;
+function resetDelSide(){delSideArmed=false; const b=$('delSide'); const last=S.sides[S.sides.length-1];
+  b.textContent='Delete side'; b.disabled=S.sides.length<=1; b.title=last?`Deletes the last side (${last.name||'Side '+S.sides.length})`:'';}
 function syncWireInputs(r){
   S.sides.forEach((x,i)=>{for(let j=0;j<3;j++){const el=$(`w${i}_${j}`); if(!el) continue;
     if(S.testDist==='area'){el.disabled=true; if(r&&r.segs) el.value=r.segs[3*i+j].L1.toFixed(3);} else el.disabled=false;}});
@@ -694,6 +699,12 @@ $('add').addEventListener('click',()=>{
   const last=S.sides[S.sides.length-1]||{length:400,width:60,rp:8,wire:[0.5,0.5,0.5],T:[35,35,35]};
   S.sides.push({name:'Side '+(S.sides.length+1),color:'#7a8699',length:last.length,width:last.width,rp:last.rp,wire:last.wire.slice(),T:last.T.slice()});
   markEdited(); save(); renderZones(); update();
+});
+$('delSide').addEventListener('click',()=>{
+  if(S.sides.length<=1) return;
+  const last=S.sides[S.sides.length-1], nm=last.name||('Side '+S.sides.length);
+  if(!delSideArmed){delSideArmed=true; $('delSide').textContent=`Confirm delete ${nm}`; return;}
+  S.sides.pop(); markEdited(); save(); renderZones(); update();
 });
 $('reset').addEventListener('click',()=>{S=clone(EXAMPLE); isExample=true; save(); renderSetup(); renderZones(); update();});
 $('nextRound').addEventListener('click',()=>{
